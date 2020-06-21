@@ -1,6 +1,6 @@
 # MetropolisEngine
 
-status: in development for own use on the test case [cylinder](https://github.com/jklebes/cylinder)
+status: in development for own use on the test case [cylinder](https://github.com/jklebes/cylinder);
       hosted at test.pypi
 
 Markov chain Monte Carlo simulation on a physics system.  Mixed complex and real parameter space and adaptive. 
