@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="metropolis-engine",
-    version="0.0.2",
+    name="metropolisengine",
+    version="0.0.3",
     author="Jason Klebes",
     author_email="jsklebes@googlemail.com",
     description="adaptive McMC algorithm on mixed real-complex parameter space for physics simulations",
