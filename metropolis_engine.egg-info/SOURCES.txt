@@ -4,5 +4,5 @@ metropolis_engine.egg-info/PKG-INFO
 metropolis_engine.egg-info/SOURCES.txt
 metropolis_engine.egg-info/dependency_links.txt
 metropolis_engine.egg-info/top_level.txt
-src/__init__.py
-src/metropolis_engine.py
+metropolisengine/__init__.py
+metropolisengine/metropolis_engine.py

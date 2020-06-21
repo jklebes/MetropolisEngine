@@ -1,14 +1,27 @@
 Metadata-Version: 2.1
 Name: metropolis-engine
-Version: 0.0.1
-Summary: McMC algorithm on mixed real-complex parameter space
+Version: 0.0.2
+Summary: adaptive McMC algorithm on mixed real-complex parameter space for physics simulations
 Home-page: https://github.com/jklebes/metropolis-engine
 Author: Jason Klebes
 Author-email: jsklebes@googlemail.com
 License: UNKNOWN
 Description: # MetropolisEngine
         
-        Markov chain Monte Carlo simulation on a physics system
+        status: in development for own use on the test case [cylinder](https://github.com/jklebes/cylinder)
+              hosted at test.pypi
+        
+        Markov chain Monte Carlo simulation on a physics system.  Mixed complex and real parameter space and adaptive. 
+        Works together with some external function that takes a list of (real and complex) parameters and returns an energy. 
+        
+        INSTALL:
+        
+        pip install --index-url https://test.pypi.org/simple metropolis-engine
+        
+        IMPORT:
+        
+        import metropolisengine
+        
         
 Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
