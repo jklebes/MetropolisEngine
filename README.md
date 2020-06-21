@@ -12,9 +12,9 @@ pip install --index-url https://test.pypi.org/simple metropolisengine
 
 IMPORT:
 
-import metropolisengine
+import metropolisengine as me
 
 USE:
 
-metropolisengine.ComplexAdaptiveMetropolisEngine()
+me.ComplexAdaptiveMetropolisEngine()
 
