@@ -1,0 +1,6 @@
+README.md
+setup.py
+metropolisengine.egg-info/PKG-INFO
+metropolisengine.egg-info/SOURCES.txt
+metropolisengine.egg-info/dependency_links.txt
+metropolisengine.egg-info/top_level.txt
