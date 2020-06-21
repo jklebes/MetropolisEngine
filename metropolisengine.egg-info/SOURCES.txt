@@ -1,5 +1,7 @@
 README.md
 setup.py
+metropolisengine/__init__.py
+metropolisengine/metropolis_engine.py
 metropolisengine.egg-info/PKG-INFO
 metropolisengine.egg-info/SOURCES.txt
 metropolisengine.egg-info/dependency_links.txt

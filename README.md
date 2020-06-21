@@ -8,9 +8,13 @@ Works together with some external function that takes a list of (real and comple
 
 INSTALL:
 
-pip install --index-url https://test.pypi.org/simple metropolis-engine
+pip install --index-url https://test.pypi.org/simple metropolisengine
 
 IMPORT:
 
 import metropolisengine
+
+USE:
+
+metropolisengine.ComplexAdaptiveMetropolisEngine()
 
