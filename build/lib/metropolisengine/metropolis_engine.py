@@ -743,5 +743,40 @@ class ComplexAdaptiveMetropolisEngine(RobbinsMonroAdaptiveMetropolisEngine):
     self.update_amplitude_sigma(accept)
     #print("updated a sigma")
     state[0]=amplitude
-    #print(state[0])
+    #print(state[0]) 
     return state, surface_energy, field_energy
+ 
+  def step_amplitude_no_field(self, amplitude, surface_energy, system):
+    """
+    Stepping amplitude by metropolis algorithm.
+    :param amplitude:
+    :param field_coeffs:
+    :param surface_energy:
+    :param field_energy:
+    :param system:
+    :return:
+    """
+    proposed_amplitude = self.draw_amplitude_from_proposal_distriution(amplitude)
+    if abs(proposed_amplitude) >= 1:
+      # don't accept.
+      # like an infinite energy barrier to self-intersection.
+      # does not violate symmetric jump distribution, because this is like
+      # an energy-landscape-based decision after generation
+      self.update_amplitude_sigma(accept=False)
+      return state, surface_energy, field_energy
+    system.evaluate_integrals(proposed_amplitude)
+    new_surface_energy = system.calc_surface_energy(amplitude = proposed_amplitude, amplitude_change=False)
+    #new_field_energy = system.calc_field_energy(state=state, amplitude_change=False) # will have the wrong amplitude at state[0] but that's ok if not used for change=False
+    accept = self.metropolis_decision(surface_energy,new_surface_energy)
+    #print("old energy ", field_energy, surface_energy)
+    #print("proposed_ampltide", proposed_amplitude)
+    #print("new energys", new_field_energy, new_surface_energy)
+    if accept:
+      #print("accepted")
+      field_energy = new_field_energy
+      surface_energy = new_surface_energy
+      amplitude = proposed_amplitude
+    self.update_amplitude_sigma(accept)
+    #print("updated a sigma")
+    #print(state[0])
+    return amplitude, surface_energy, field_energy  

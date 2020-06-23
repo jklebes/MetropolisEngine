@@ -8,28 +8,28 @@ import scipy.stats
 
 class MetropolisEngine():
   """
-  base version: proposal distribution is fixed in width and covariance.
-  By default the covariance matrix of the multivariate proposal distribution is the dientity matrix, equivalent to drawing from n independent gaussian distribution.
+  base class: non-adaptive Metropolis algorithm
+  proposal distribution is fixed in width (sigma) and covariance.
+  By default the covariance matrix of the multivariate proposal distribution is the identity matrix, equivalent to drawing from n independent gaussian distribution.
   A different fixed covariance matrix can alo be chosen.
-  draws steps from n separate gaussian (or other) distributions.
-  Using just this base class with constant (in run time), global (in parameter space) proposal distribution guarantees ergodic sampling.
+  No adaptiveness guarantees ergodic sampling.
   Subclass StaticCovarianceAdaptiveMetropolisEngine is recommended minimum level of adaptiveness.
   """
 
-  def __init__(self, initial_field_coeffs, initial_amplitude=None, sampling_width=0.05, temp=0, covariance_matrix=None,
-               target_acceptance=.3):
+  def __init__(self, initial_complex_params, initial_real_params, sampling_width=0.05, covariance_matrix=None,
+               target_acceptance=.3, temp=0):
     """
-    :param num_field_coeffs: number of field coefficient degrees of freedom.
+    :param initial_field_coeffs: initial values for complex parameters
     :param sampling_width: float, width of proposal distribution.  A factor scaling covariance matrix in multivariate gaussian proposal distribution.
     :param temp: system temperature.  Optional, default 0.
     :param covariance_matrix: initial or constant covariance matrix of multivariate gaussian proposal distribution. Optional, defaults to identity matrix. Should reflect correlations between the parameters if known.  Dimensions should match number of free parameters: in general number of field coefficients + 1.  2*number of field coefficients+1 Where phase/ampltitude or real/imag parts of field coefficients are treated as separate degrees of freedom.  complex entries in subclass ComplexAdaptiveMetropolisEngine.
     """
     self.temp = temp
-    assert (self.temp is not None)
-    self.num_field_coeffs = len(initial_field_coeffs)
-    self.max_field_coeffs = (self.num_field_coeffs-1)//2
-    #self.keys_ordered = list(range(-self.max_field_coeffs, self.max_field_coeffs + 1))
-    self.param_space_dims = self.num_field_coeffs + 1  # in more basic case perturbation amplitude, magnitudes only of ci.  subclasses may consider both magnitude and phase / both real and img parts of cis and increase this number.
+    assert (self.temp is not None and self.temp >= 0)
+    self.num_complex_params = len(initial_complex_params)
+    self.num_real_params = len(initial_real_params)
+    #self.max_field_coeffs = (self.num_field_coeffs-1)//2 # is this used?
+    self.param_space_dims = self.num_complex_params + self.num_real_params  # in more basic case perturbation amplitude, magnitudes only of ci.  subclasses may consider both magnitude and phase / both real and img parts of cis and increase this number.
     if covariance_matrix is None:
       self.covariance_matrix = np.identity(
         self.param_space_dims)  # initial default guess needs to be of the right order of magnitude of variances, or covariance matrix doesnt stabilize withing first 200 steps before sigma starts adjusting
@@ -38,24 +38,34 @@ class MetropolisEngine():
     #self.accepted_counter = 1
     self.step_counter = 1
     self.measure_step_counter = 1
-    self.amplitude_step_counter = 1
-    self.field_step_counter = 1
-    if isinstance(sampling_width,list):
-      self.field_sampling_width, self.amplitude_sampling_width = sampling_width
+    self.real_group_step_counter = 1 #TODO : make dict, for groups in "sequential"
+    self.complex_group_step_counter = 1
+    if isinstance(sampling_width,list): #TODO : conform this to how two groups are handles
+      self.complex_group_sampling_width, self.real_group_sampling_width = sampling_width
       self.sampling_width = self.field_sampling_width #arbitrarily use this one when generating a small number to stabilize cov matrix
     else:
       self.sampling_width = sampling_width
-      self.field_sampling_width = sampling_width
-      self.amplitude_sampling_width = sampling_width
+      self.complex_group_sampling_width = sampling_width
+      self.real_group_sampling_width = sampling_width
     self.target_acceptance = target_acceptance #TODO: hard code as fct of nuber of parameter space dims
-    self.mean = np.array([]) #measuring that set of parameters that constitute the basis of parameter space in each case
-    self.mean=self.construct_state(initial_amplitude, initial_field_coeffs)
-    self.observables = self.construct_observables_state(initial_amplitude, initial_field_coeffs) 
+    #self.mean = np.array([]) #measuring that set of parameters that constitute the basis of parameter space in each case
+    self.mean=self.construct_state(initial_real_params, initial_complex_params)
+    self.observables = self.construct_observables_state(initial_real_params, initial_complex_params)
+    # TODO: should be input 
     self.observabes_names = ["amplitude_squared"]
     self.params_names = ["abs_amplitude"]
     self.params_names.extend(["abs_c"+str(i) for i in range(-self.max_field_coeffs, self.max_field_coeffs+1)]) 
                                                                 #for output files etc, labelling coefficeints by their wavenumber index from -n to n, 
                                                                 #even though they are stored in ordered list with implicit indices 0 to 2n+1
+
+
+  def set_temperature(self, new_temp):
+    """
+    change metropolis engine temperature
+    :param new_temp: new temperature value, float >=0 .
+    """
+    assert (new_temp >= 0)
+    self.temp = new_temp
 
   def update_mean(self, state):
     assert (isinstance(state, np.ndarray))
@@ -67,115 +77,54 @@ class MetropolisEngine():
     self.observables *= (self.measure_step_counter - 1) / self.measure_step_counter
     self.observables += state_observables / self.measure_step_counter
 
+  def set_energy_function(energy_function):
+    #by default this is also called for system energy on change of real group only or complex group only
+    self.calc_energy = energy_function
 
-  def step_fieldcoeffs(self, field_coeffs, field_energy, amplitude, system,
-                      amplitude_change=False):
-    """
-    """
-    proposed_field_coeffs = self.draw_field_coeffs_from_proposal_distribution(amplitude, field_coeffs)
-    #print("proposed field coeffs", proposed_field_coeffs, "old", field_coeffs)
-    proposed_field_energy = system.calc_field_energy(field_coeffs=proposed_field_coeffs, amplitude=amplitude,
-                                                     amplitude_change=False)
-    accept= self.metropolis_decision(field_energy, proposed_field_energy)
-    #if self.field_step_counter%60==0:
-    #print("proposed field energy", proposed_field_energy, "old", field_energy)
-    #print("amplitude", amplitude, "field coeffs", field_coeffs)
+  def set_energy_function_terms(functions, dependencies):
+    #set (term name : dependednt on groups)
+
+  def set_constraints():
+    # (group: bool function)
+
+
+  def step_group(self, groupid, values, group_energy):
+    proposed_values = self.draw_group_params(values)
+    if reject_condition(proposed_values):
+      self.update_group_sigma(accept=False)
+      return group_params, group_energy
+    proposed_group_energy = self.group_energy_function[groupid]
+    accept = self.metropolis_decision(sum(group_energy), sum(proposed_group_energy))
     if accept:
-      #if self.field_step_counter%60==0:
-      #print("accepted")
-      field_energy = proposed_field_energy
-      field_coeffs = proposed_field_coeffs
-    self.update_field_sigma(accept)
-    return field_coeffs, field_energy
+      values = proposed_values
+      group_energy = proposed_group_energy
+    self.update_group_sigma(accept)
+    return values, group_energy
 
-  def step_amplitude(self, amplitude, field_coeffs, surface_energy, field_energy, system):
-    """
-    Stepping amplitude by metropolis algorithm.
-    :param amplitude:
-    :param field_coeffs:
-    :param surface_energy:
-    :param field_energy:
-    :param system:
-    :return:
-    """
-    proposed_amplitude = self.draw_amplitude_from_proposal_distriution(amplitude)
-    #print(proposed_amplitude)
-    if abs(proposed_amplitude) >= 1:
-      # don't accept.
-      # like an infinite energy barrier to self-intersection.
-      # does not violate symmetric jump distribution, because this is like
-      # an energy-landscape-based decision after generation
-      self.update_amplitude_sigma(accept=False) #DO NOT have an effect on step length from this - leads to ever smaller steps that still get rejected half the time
-      #print("early return")
-      return amplitude, surface_energy, field_energy
-    new_field_energy = system.calc_field_energy(field_coeffs, proposed_amplitude, amplitude_change=True)
-    new_surface_energy = system.calc_surface_energy(proposed_amplitude, amplitude_change=False)
-    accept = self.metropolis_decision((field_energy + surface_energy), (new_field_energy + new_surface_energy))
-    #print("old energy ", field_energy, surface_energy)
-    #print("new energys", new_field_energy, new_surface_energy)
-    if accept:
-      #print("accepted")
-      field_energy = new_field_energy
-      surface_energy = new_surface_energy
-      amplitude = proposed_amplitude
-    self.update_amplitude_sigma(accept)
-    #print("updated a sigma")
-    return amplitude, surface_energy, field_energy
-
-  def step_all(self, amplitude, field_coeffs, surface_energy, field_energy, system):
-    """
-    Step all parameters (amplitude, field coeffs) simultaneously.  True metropolis algorithm.
-    Generic to any proposal distribution and adaptive algorithm
-    :param amplitude:
-    :param field_coeffs:
-    :param surface_energy:
-    :param field_energy:
-    :param system: object which holds functions for calculating energy.  May store pre-calculated values and shortcuts.
-    :return: new state and energy in the form tuple (ampltiude, field_coeffs (dict), surface_energy, field_energy).  Identical to input parameters if step was rejected.  Also modifies step counter and acceptance rate counter.
-    """
-    #print("field energy in", field_energy)
-    proposed_amplitude, proposed_field_coeffs = self.draw_all_from_proposal_distribution(amplitude, field_coeffs)
-    #print("propsed state", proposed_amplitude, proposed_field_coeffs)
-    if abs(proposed_amplitude) >= 1:
+  def step_all(self, values, energy):
+    proposed_values = self.draw_all(values)
+    if reject_condition(proposed_values):
       self.update_sigma(False)
-      return amplitude, field_coeffs, surface_energy, field_energy
-    new_field_energy = system.calc_field_energy(proposed_field_coeffs, proposed_amplitude, amplitude_change=True)
-    new_surface_energy = system.calc_surface_energy(proposed_amplitude, amplitude_change=False)
-    accept = self.metropolis_decision((field_energy + surface_energy), (new_field_energy + new_surface_energy))
-    #print("step with", self.sampling_width, self.covariance_matrix[0,0])
-    #print("surface energy", new_surface_energy, "old suface energy", surface_energy)
-    #print("field_energy", new_field_energy, "old_field_energy", field_energy)
-    #if self.step_counter%60==0:
-      #print("proposed field energy", new_field_energy, "old", field_energy)
-      #print("amplitude", amplitude)
+      return values, energy
+    proposed_energy = None #somehow calc all terms
+    accept = self.metropolis_decision(energy, proposed_energy)
     if accept:
-      #if self.step_counter%60==0:
-        #print("accepted")
-      #print("accepted")
-      field_energy = new_field_energy
-      surface_energy = new_surface_energy
-      amplitude = proposed_amplitude
-      field_coeffs = proposed_field_coeffs
-      #self.accepted_counter += 1
+      energy = proposed_energy
+      values = proposed_values
     self.update_sigma(accept)
-    # output system properties, energy
-    #print("field_energy out ", field_energy)
-    return amplitude, field_coeffs, surface_energy, field_energy
+    return values, energy
 
 
   def update_sigma(accept):
     pass
-  def update_field_sigma(accept):
-    pass
-  def update_amplitude_sigma(accept):
+  def update_group_sigma(group_id, accept):
     pass
 
-  def measure(self,amplitude, field_coeffs):
+  def measure(self,values):
     self.measure_step_counter +=1
-    #basic: measure means of two goups of variables
-    state = self.construct_state(amplitude, field_coeffs)
+    state = self.construct_state(values) # still necessary?
     self.update_mean(state)
-    state_observables = self.construct_observables_state(amplitude, field_coeffs)
+    state_observables = self.construct_observables_state(values)
     self.update_observables_mean(state_observables)
 
   def draw_field_coeffs_from_proposal_distribution(self, amplitude, field_coeffs):
@@ -263,6 +212,8 @@ class MetropolisEngine():
     """
     return np.array([amplitude**2])
 
+  ##############functions for complex number handling #########################
+
   def modify_phase(self, amplitude, phase, phase_sigma=.1):
     """
     takes a random number and changes phase by gaussian proposal distribution
@@ -274,7 +225,7 @@ class MetropolisEngine():
 
   def random_complex(self, r):
     """
-    a random complex number with a random (uniform between -pi and pi) phase and exactly the given ampltiude r
+    a random complex number with a random (uniform between -pi and pi) phase and exactly the given magnitude r
     :param r: magnitude of complex number
     :return: cmath complex number object in standard real, imaginary represenation
     """
@@ -292,15 +243,6 @@ class MetropolisEngine():
     phase = random.uniform(0, 2 * math.pi)
     return cmath.rect(amplitude, phase)
 
-
-  def set_temperature(self, new_temp):
-    """
-    change metropolis engine temperature
-    :param new_temp: new temperature value, float >=0 .
-    """
-
-    assert (new_temp >= 0)
-    self.temp = new_temp
 
 class StaticCovarianceAdaptiveMetropolisEngine(MetropolisEngine):
   """ Reasoning and algorithm from 
@@ -743,5 +685,40 @@ class ComplexAdaptiveMetropolisEngine(RobbinsMonroAdaptiveMetropolisEngine):
     self.update_amplitude_sigma(accept)
     #print("updated a sigma")
     state[0]=amplitude
-    #print(state[0])
+    #print(state[0]) 
     return state, surface_energy, field_energy
+ 
+  def step_amplitude_no_field(self, amplitude, surface_energy, system):
+    """
+    Stepping amplitude by metropolis algorithm.
+    :param amplitude:
+    :param field_coeffs:
+    :param surface_energy:
+    :param field_energy:
+    :param system:
+    :return:
+    """
+    proposed_amplitude = self.draw_amplitude_from_proposal_distriution(amplitude)
+    if abs(proposed_amplitude) >= 1:
+      # don't accept.
+      # like an infinite energy barrier to self-intersection.
+      # does not violate symmetric jump distribution, because this is like
+      # an energy-landscape-based decision after generation
+      self.update_amplitude_sigma(accept=False)
+      return state, surface_energy, field_energy
+    system.evaluate_integrals(proposed_amplitude)
+    new_surface_energy = system.calc_surface_energy(amplitude = proposed_amplitude, amplitude_change=False)
+    #new_field_energy = system.calc_field_energy(state=state, amplitude_change=False) # will have the wrong amplitude at state[0] but that's ok if not used for change=False
+    accept = self.metropolis_decision(surface_energy,new_surface_energy)
+    #print("old energy ", field_energy, surface_energy)
+    #print("proposed_ampltide", proposed_amplitude)
+    #print("new energys", new_field_energy, new_surface_energy)
+    if accept:
+      #print("accepted")
+      field_energy = new_field_energy
+      surface_energy = new_surface_energy
+      amplitude = proposed_amplitude
+    self.update_amplitude_sigma(accept)
+    #print("updated a sigma")
+    #print(state[0])
+    return amplitude, surface_energy, field_energy  
