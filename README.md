@@ -16,5 +16,4 @@ import metropolisengine as me
 
 USE:
 
-me.ComplexAdaptiveMetropolisEngine()
-
+see demo/
