@@ -30,7 +30,12 @@ class MetropolisEngine():
     :param complex_covariance_matrix: initial or constant covariance matrix of multivariate gaussian proposal distribution. Optional, defaults to identity matrix. Should reflect correlations between the parameters if known.  Dimensions should match number of complex parameters. Must be complex-type np array. WARNING: at the moment only variances (the diagonal) is used, covariances between two different complex parameters are measured but using them to shape proposal distribution is not yet implemented.
     :param reject_condition: function list [real parameter values, complex parameter values] -> bool.  A system constraint: steps intot his region of parameter space are rejected.
     """
-    
+     #initialize data collection
+    self.real_params_time_series = []
+    self.complex_params_time_series = []
+    self.observables_time_series = []
+    self.real_group_sampling_width_time_series =[]
+    self.complex_group_sampling_width_time_series = []
     #parameter space #
     if initial_real_params is None and initial_complex_params is None:
       print("must give list containing  at least one value for initial real or complex parameters")
@@ -43,6 +48,8 @@ class MetropolisEngine():
       self.num_real_params = 0
       self.step_all = self.step_complex_group  # if the parameter space is all complex, go directly to step_complex_group when all
       self.measure = self.measure_complex_system
+      self.real_params_time_series = None
+      self.real_group_sampling_width_time_series = None
     if initial_complex_params is not None:
       self.complex_params = np.array(initial_complex_params)
       self.num_complex_params = len(initial_complex_params)
@@ -51,6 +58,8 @@ class MetropolisEngine():
       self.num_complex_params = 0
       self.step_all = self.step_real_group  # if the parameter space is all real, go directly t step_real_group  when stepping all
       self.measure = self.measure_real_system
+      self.complex_params_time_series = None
+      self.complex_group_sampling_width_time_series = None
     self.param_space_dims =  self.num_real_params  + self.num_complex_params
  
     # initializing quantities measured #
@@ -117,12 +126,13 @@ class MetropolisEngine():
       #used in case energy is a single term and parameter space is only real or only complex
       self.real_group_energy_terms = ["total"]
       self.complex_group_energy_terms = ["total"]
-    if reject_condition is None:
-      self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
     #initialize energy
     #self.energy:
     self.initialize_energy_dict() 
+    self.energy_time_series = dict([(key,[]) for key in self.energy])    
     self.total_energy= self.calc_energy_total(initial_real_params, initial_complex_params)
+    if reject_condition is None:
+      self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
 
 
   def set_energy_function(self, energy_function):
@@ -319,6 +329,14 @@ class MetropolisEngine():
     # other parameters that are not the basis for cov matrices:
     self.construct_observables()
     self.update_observables_mean()
+    #append to time series
+    self.real_params_time_series.append(self.real_params)
+    self.complex_params_time_series.append(self.complex_params)
+    self.observables_time_series.append(self.observables)
+    for term in energy:
+    	self.energy_time_series[term].append(self.energy[term])
+    self.real_group_sampling_width_time_series.append(self.real_group_sampling_width)
+    self.complex_group_sampling_width_time_series.append(self.complex_group_sampling_width)
 
   #only used when parameter space is pure real or pure complex.   
   def measure_real_system(self):
@@ -327,6 +345,12 @@ class MetropolisEngine():
     # other parameters that are not the basis for cov matrices:
     self.construct_observables()
     self.update_observables_mean()
+    #append to time series
+    self.real_params_time_series.append(self.real_params)
+    self.observables_time_series.append(self.observables)
+    for term in energy:
+    	self.energy_time_series[term].append(self.energy[term])
+    self.real_group_sampling_width_time_series.append(self.real_group_sampling_width)_
 
   def measure_complex_system(self):
     self.measure_step_counter +=1
@@ -334,6 +358,11 @@ class MetropolisEngine():
     # other parameters that are not the basis for cov matrices:
     self.construct_observables()
     self.update_observables_mean()
+    self.complex_params_time_series.append(self.complex_params)
+    self.observables_time_series.append(self.observables)
+    for term in energy:
+    	self.energy_time_series[term].append(self.energy[term])
+    self.complex_group_sampling_width_time_series.append(self.complex_group_sampling_width)
 
   def measure_real(self):
     #new_state = self.construct_state(amplitude, field_coeffs)
@@ -435,6 +464,10 @@ class MetropolisEngine():
     observables.extend([x*x.conjugate() for x in self.complex_params])
     self.observables = np.array(observables)
 
+  ############## collect, save data #####################
+  def save_time_series_csv():
+    df = pandas.DataFrame({"obsrvables", observables_time_series})
+
 
   ##############functions for complex number handling #########################
 
@@ -466,22 +499,5 @@ class MetropolisEngine():
     amplitude = random.gauss(0, sigma)
     phase = random.uniform(0, 2 * math.pi)
     return cmath.rect(amplitude, phase)
-
-
-class AdaptiveMetropolisEngine(MetropolisEngine):
-  def __init__(self, initial_real_params, sampling_width=0.05, covariance_matrix=None, params_names=None, target_acceptance=.3, temp=0):
-    super().__init__(initial_real_params, sampling_width=sampling_width,covariance_matrix=covariance_matrix, params_names=params_names, 
-target_acceptance=target_acceptance, temp=temp)
-    # alpha (a constant used later) := -phi^(-1)(target acceptance /2) 
-    # ,where  phi is the cumulative density function of the standard normal distribution
-    # norm.ppf ('percent point function') is the inverse of the cumulative density function of standard normal distribution
-    self.alpha = -1 * scipy.stats.norm.ppf(self.target_acceptance / 2)
-    self.m = self.param_space_dims
-    self.steplength_c = None
-    self.ratio = ( #  a constant - no need to recalculate 
-        (1 - (1 / self.m)) * math.sqrt(2 * math.pi) * math.exp(self.alpha ** 2 / 2) / 2 * self.alpha + 1 / (
-        self.m * self.target_acceptance * (1 - self.target_acceptance)))
-    # inherit mean, construct mean from base class : abs amplitude, abs of field coeffs
-    # inherit other observables to measure from base class: none
 
 
