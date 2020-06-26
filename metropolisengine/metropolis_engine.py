@@ -39,14 +39,14 @@ class MetropolisEngine():
     else:
       self.real_params = []
       self.num_real_params = 0
-      self.draw_all = self.draw_complex_group  # if the parameter space is all complex, go directly to draw_complex when drawing all
+      self.step_all = self.step_real_group  # if the parameter space is all complex, go directly to step_complex_group when all
     if initial_complex_params is not None:
       self.complex_params = initial_complex_params
       self.num_complex_params = len(initial_complex_params)
     else:
       self.complex_params = []
       self.num_complex_params = 0
-      self.draw_all = self.draw_complex_group  # if the parameter space is all complex, go directly to draw_complex when drawing all
+      self.step_all = self.draw_complex_group  # if the parameter space is all real, go directly t step_real_group  when stepping all
     self.param_space_dims =  self.num_real_params  + self.num_complex_params
  
     # initializing quantities measured #
@@ -104,7 +104,7 @@ class MetropolisEngine():
       if energy_term_dependencies:
         print("dependecies of term-wise energy functions given, but energy fcuntion was not given term-wise")
     if reject_condition is None:
-      self.reject_condition = lambda state: False
+      self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
 
 
 
@@ -187,7 +187,7 @@ class MetropolisEngine():
 
   def step_real_group(self):
     proposed_real_params = self.draw_real_group()
-    if self.reject_condition(proposed_real_params, complex_params):
+    if self.reject_condition(proposed_real_params, self.complex_params):
       self.update_real_group_sigma(accept=False)
       return False
     #self.real_group_energy_terms : keys to energy terms which change when real-group params change
@@ -235,7 +235,7 @@ class MetropolisEngine():
                                                       check_valid='raise')
     return proposed_state
 
-  def draw_complex_group(self, state):
+  def draw_complex_group(self):
     covariances = np.diagonal(self.covariance_matrix_complex)
     #map self.gausian_complex over the list
     addition_complex = np.array(list(map(lambda sc : self.gaussian_complex(sc[0]**2*sc[1]), (self.sampling_width, covariances) ))) #addition has compeletely random phase

@@ -38,7 +38,7 @@ values = initial_values
 energy = system.calc_system_energy(initial_values)
 for i in range(1000):
   for j in range(10):
-    engine.step_all()
+    engine.step_all()  # should be redirected to step_real_group, because no complex parameters were initialized
     print(engine.real_params, engine.complex_params, engine.energy)
   #measure running mean, covariance matrix estimate every 10 steps
   engine.measure(values) #it;s not necessary to record the values at every step , rather record at about correlation time
