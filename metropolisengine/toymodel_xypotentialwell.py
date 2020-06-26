@@ -30,20 +30,20 @@ class System():
 system = System(const=1)
 
 initial_values=np.array([0.0,0.0])
-engine = metropolis_engine.MetropolisEngine(energy_function = lambda real_params : system.calc_system_energy(real_params, []), initial_real_params=initial_values, temp=0.1)
+engine = metropolis_engine.MetropolisEngine(energy_function = lambda real_params, complex_params : system.calc_system_energy(real_params), initial_real_params=initial_values, temp=0.1)
 
  
 # run the main simulation by looping over metropolis engine's step
 values = initial_values
-energy = system.calc_system_energy(initial_values)
+engine.energy = {"total":system.calc_system_energy(initial_values)}
 for i in range(1000):
   for j in range(10):
     engine.step_all()  # should be redirected to step_real_group, because no complex parameters were initialized
-    print(engine.real_params, engine.complex_params, engine.energy)
+    #print(engine.real_params, engine.complex_params, engine.energy)
   #measure running mean, covariance matrix estimate every 10 steps
-  engine.measure(values) #it;s not necessary to record the values at every step , rather record at about correlation time
+  engine.measure() #it;s not necessary to record the values at every step , rather record at about correlation time
   
 
 # examine the results: final value of mean, covariance matrix
-print(engine.mean)
-print(engine.covariance_matrix)
+print("mean", engine.real_mean, engine.complex_mean)
+print("cov", engine.covariance_matrix_real, engine.covariance_matrix_complex)

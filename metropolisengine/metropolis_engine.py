@@ -39,14 +39,16 @@ class MetropolisEngine():
     else:
       self.real_params = []
       self.num_real_params = 0
-      self.step_all = self.step_real_group  # if the parameter space is all complex, go directly to step_complex_group when all
+      self.step_all = self.step_complex_group  # if the parameter space is all complex, go directly to step_complex_group when all
+      self.measure = self.measure_complex_system
     if initial_complex_params is not None:
       self.complex_params = initial_complex_params
       self.num_complex_params = len(initial_complex_params)
     else:
       self.complex_params = []
       self.num_complex_params = 0
-      self.step_all = self.draw_complex_group  # if the parameter space is all real, go directly t step_real_group  when stepping all
+      self.step_all = self.step_real_group  # if the parameter space is all real, go directly t step_real_group  when stepping all
+      self.measure = self.measure_real_system
     self.param_space_dims =  self.num_real_params  + self.num_complex_params
  
     # initializing quantities measured #
@@ -68,6 +70,7 @@ class MetropolisEngine():
     self.complex_mean = initial_complex_params
     #fill self.observables:
     self.construct_observables() # measured quatities derived from both real params and complex params are saved in one list, because they are all real datatype
+    self.observables_mean = self.observables
     if params_names:
     	self.params_names = params_names
     else:
@@ -81,11 +84,13 @@ class MetropolisEngine():
     # metropolis step, proposal distribution, and adaptiveness
     self.temp = temp
     assert (self.temp is not None and self.temp >= 0)
-    if isinstance(sampling_width,dict): #TODO : conform this to how two groups are handles
-      self.group_sampling_width = sampling_width
-      self.sampling_width = self.field_sampling_width #arbitrarily use this one when generating a small number to stabilize cov matrix
+    if isinstance(sampling_width, list): #TODO : conform this to how two groups are handles
+      self.real_group_sampling_width = sampling_width[0]
+      self.complex_group_sampling_width = sampling_width[1] #arbitrarily use this one when generating a small number to stabilize cov matrix
     else:
       self.sampling_width = sampling_width
+      self.real_group_sampling_width = sampling_width
+      self.complex_group_sampling_width = sampling_width
     self.target_acceptance = target_acceptance #TODO: hard code as fct of nuber of parameter space dims
 
     #functions#
@@ -103,6 +108,9 @@ class MetropolisEngine():
       self.calc_energy_total = energy_function #use in step_all
       if energy_term_dependencies:
         print("dependecies of term-wise energy functions given, but energy fcuntion was not given term-wise")
+      #used in case energy is a single term and parameter space is only real or only complex
+      self.real_group_energy_terms = ["total"]
+      self.complex_group_energy_terms = ["total"]
     if reject_condition is None:
       self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
 
@@ -231,14 +239,14 @@ class MetropolisEngine():
     """
     # no arguments - look at self.real_params
     proposed_state = np.random.multivariate_normal(self.real_params,
-                                                      self.sampling_width ** 2 * self.covariance_matrix_real,
+                                                      self.real_group_sampling_width ** 2 * self.covariance_matrix_real,
                                                       check_valid='raise')
     return proposed_state
 
   def draw_complex_group(self):
     covariances = np.diagonal(self.covariance_matrix_complex)
     #map self.gausian_complex over the list
-    addition_complex = np.array(list(map(lambda sc : self.gaussian_complex(sc[0]**2*sc[1]), (self.sampling_width, covariances) ))) #addition has compeletely random phase
+    addition_complex = np.array(list(map(lambda sc : self.gaussian_complex(sc[0]**2*sc[1]), (self.complex_group_sampling_width, covariances) ))) #addition has compeletely random phase
     return np.array([np.random.normal(m, self.sampling_width[index] * covariances[index]) if index < self.num_real_params else m + addition_complex[index] for index,m in enumerate(state) ])
   
   def draw_all(self):
@@ -279,36 +287,67 @@ class MetropolisEngine():
  
   def measure(self):
     self.measure_step_counter +=1
+    self.measure_real()
+    self.measure_complex()
+    # other parameters that are not the basis for cov matrices:
+    self.construct_observables()
+    self.update_observables_mean()
+
+  #only used when parameter space is pure real or pure complex.   
+  def measure_real_system(self):
+    self.measure_step_counter +=1
+    self.measure_real()
+    # other parameters that are not the basis for cov matrices:
+    self.construct_observables()
+    self.update_observables_mean()
+
+  def measure_complex_system(self):
+    self.measure_step_counter +=1
+    self.measure_complex()
+    # other parameters that are not the basis for cov matrices:
+    self.construct_observables()
+    self.update_observables_mean()
+
+  def measure_real(self):
     #new_state = self.construct_state(amplitude, field_coeffs)
-    old_mean = copy.copy(self.mean)
-    self.update_mean(self.real_params, self.complex_params)
+    old_mean_real = copy.copy(self.real_mean)
+    self.update_real_mean()
     if self.measure_step_counter > 50: #down from recommendedation because when measurement is taken only every n steps
                                   # from more statistically independent data I expect to get a more accurate estimate of cov matrix sooner
-      self.update_covariance_matrix(self.real_mean, self.complex_mean, self.real_params, self.complex_params)
-    # other parameters that are not the basis for cov matrix
-    self.real_observables, self.complex_observables = self.construct_observables(self.real_params, self.complex_observables)
-    self.update_observables_mean(self.real_observables, self.complex_observables)
-  
+      self.update_covariance_matrix_real(old_mean_real)
+ 
+  def measure_complex(self):
+    old_mean_complex = copy.copy(self.complex_mean)
+    self.update_complex_mean()
+    if self.measure_step_counter > 50: #down from recommendedation because when measurement is taken only every n steps
+                                  # from more statistically independent data I expect to get a more accurate estimate of cov matrix sooner
+      self.update_covariance_matrix_complex(old_mean_complex)
+ 
   def update_mean(self):
+    self.update_real_mean()
+    self.update_complex_mean()
+
+  def update_real_mean(self):
     assert (isinstance(self.real_params, np.ndarray))
-    #print("self.mean", self.mean, "state", state)
     self.real_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
     self.real_mean += self.real_params / self.measure_step_counter
+
+  def update_complex_mean(self):
     self.complex_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
     self.complex_mean += self.complex_params / self.measure_step_counter
 
   def update_observables_mean(self):
-    self.real_observables *= (self.measure_step_counter - 1) / self.measure_step_counter
-    self.real_observables += real_observables / self.measure_step_counter
-    self.complex_observables *= (self.measure_step_counter - 1) / self.measure_step_counter
-    self.complex_observables += complex_observables / self.measure_step_counter
+    self.observables_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
+    self.observables_mean += self.observables / self.measure_step_counter
 
-  def update_covariance_matrix(self, old_mean_real, old_mean_complex):
+  def update_covariance_matrix_real(self, old_mean_real):
     i = self.measure_step_counter
     small_number = self.real_group_sampling_width ** 2 / self.measure_step_counter #stabilizes - coutnerintuitivelt causes nonzero estimated covariance for completely constant parameter at low stepcounts #self.step_counter instead of measurestpcounter for a smaller addition
     self.covariance_matrix_real *= (i - 2) / (i - 1)
     self.covariance_matrix_real += np.outer(old_mean_real, old_mean_real) - i / (i - 1) * np.outer(self.real_mean, self.real_mean) + np.outer(
       self.real_params, self.real_params) / (i - 1) + small_number * np.identity(self.num_real_params)
+  def update_covariance_matrix_complex(self, old_mean_complex):
+    i = self.measure_step_counter
     small_number = self.complex_group_sampling_width ** 2 / self.measure_step_counter
     self.covariance_matrix_real *= (i - 2) / (i - 1)
     self.covariance_matrix_real += np.outer(old_mean_complex, old_mean_complex.conjugate()) - i / (i - 1) * np.outer(self.complex_mean, self.complex_mean.conjugate()) + np.outer(
@@ -321,13 +360,16 @@ class MetropolisEngine():
     override in other classes
     """
     pass
-  def update_group_sigma(self, group_id, accept):
+  def update_real_group_sigma(self,accept):
     """
     Does nothing in non-adaptive base class,
     override in other classes
     """
     pass
-  
+  def update_complex_group_sigma(self,accept):
+    pass
+
+ 
   def construct_observables(self):
     # TODO : faster method?
     observables = [abs(x) for x in self.real_params]
