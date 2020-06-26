@@ -466,7 +466,7 @@ class MetropolisEngine():
     self.observables = np.array(observables)
 
   ############## collect, save data #####################
-  def save_time_series_to_csv(self):
+  def save_time_series(self):
     time_series_dict = dict([(name,[l[i] for l in  self.observables_time_series]) for i,name in enumerate(self.observables_names)])
     for name in self.energy:
       time_series_dict[name+"_energy"] = self.energy_time_series[name]
@@ -479,7 +479,7 @@ class MetropolisEngine():
       for i in range(self.num_complex_params):
         time_series_dict[self.params_names[self.num_real_params+i]] =[l[i] for l in self.complex_params_time_series]
       time_series_dict["complex_group_sampling_width"] = self.complex_group_sampling_width_time_series
-    df = pandas.DataFrame.from_dict(time_series_dict)
+    self.df = pandas.DataFrame.from_dict(time_series_dict)
     print(df)
 
 

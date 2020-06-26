@@ -51,4 +51,5 @@ print("mean", engine.real_mean, engine.complex_mean)
 print("cov", engine.covariance_matrix_real, engine.covariance_matrix_complex)
 print(list(zip(engine.observables_names, engine.observables)))
 
-engine.save_time_series_to_csv()
+engine.save_time_series()
+print(engine.df)
