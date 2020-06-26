@@ -42,8 +42,10 @@ for i in range(1000):
     #print(engine.real_params, engine.complex_params, engine.energy)
   #measure running mean, covariance matrix estimate every 10 steps
   engine.measure() #it;s not necessary to record the values at every step , rather record at about correlation time
+  #print("adjusted stepsize to ", engine.real_group_sampling_width)
   
 
 # examine the results: final value of mean, covariance matrix
 print("mean", engine.real_mean, engine.complex_mean)
 print("cov", engine.covariance_matrix_real, engine.covariance_matrix_complex)
+print(list(zip(engine.observables_names, engine.observables)))

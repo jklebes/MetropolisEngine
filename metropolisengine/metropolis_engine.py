@@ -18,6 +18,8 @@ class MetropolisEngine():
 
   def __init__(self, energy_function, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0, energy_term_dependencies=None):
     """
+    adaptiveness ("update_sigma" functions)  adapted from from Garthwaite, Fan & Sisson https://arxiv.org/abs/2006.12668
+
     :param energy_function: function that calculates an energy value given parameter values : [real values] [complex values] -> float .  important, mandatory: metropolis engine is coupled to the desired physics problem by setting this function.
     :param initial_real_params: initial values for real parameters.  While the starting value is not so important, the length of this list is used to set up correct dimensions of paramter space.  Optional but either intial_real_params or initial_complex_params must be a list of length >=1.
     :param initial_complex_params: initial values for complex parameters.  While the starting value is not so important, the length of this list is used to set up correct dimensions of paramter space.  Optional but either intial_real_params or initial_complex_params must be a list of length >=1.
@@ -91,7 +93,14 @@ class MetropolisEngine():
       self.sampling_width = sampling_width
       self.real_group_sampling_width = sampling_width
       self.complex_group_sampling_width = sampling_width
+    #adativeness
     self.target_acceptance = target_acceptance #TODO: hard code as fct of nuber of parameter space dims
+    self.alpha = -1 * scipy.stats.norm.ppf(self.target_acceptance / 2)
+    self.m = self.param_space_dims
+    self.steplength_c = None
+    self.ratio = ( #  a constant - no need to recalculate 
+        (1 - (1 / self.m)) * math.sqrt(2 * math.pi) * math.exp(self.alpha ** 2 / 2) / 2 * self.alpha + 1 / (
+        self.m * self.target_acceptance * (1 - self.target_acceptance)))
 
     #functions#
     if isinstance(energy_function, dict):
@@ -102,7 +111,6 @@ class MetropolisEngine():
         self.energy_term_dependencies = dict([(name,["complex", "real"]) for name in energy_function])
       self.complex_group_energy_terms = [name for name in energy_term_dependencies if "complex" in energy_term_dependencies[name]]#which energy terms change when complex params change
       self.real_group_energy_terms = [name for name in energy_term_dependencies if "real" in energy_term_dependencies[name]]
-      self.calc_energy_total = 0#difficulat function construction
     else:
       self.calc_energy ={"total": energy_function}
       self.calc_energy_total = energy_function #use in step_all
@@ -218,7 +226,7 @@ class MetropolisEngine():
     Step all parameters (amplitude, field coeffs) simultaneously. 
     Generic to any proposal distribution (draw function) and adaptive algorithm
     """
-    proposed_real_params, proposed_complex_params = self.draw_all()
+    proposed_real_params, proposed_complex_params = self.draw_real_group(), self.draw_complex_group()
     if self.reject_condition(proposed_real_params, proposed_complex_params):
       self.update_sigma(accept=False) 
       return False
@@ -228,9 +236,23 @@ class MetropolisEngine():
     if accept:
       #print("accepted", proposed_state, proposed_energy)
       self.energy = proposed_energy # TODO : saved at energy_dict because I dont expect a switch of method within a simulation
-      state = proposed_state
+      self.real_params = proposed_real_params
+      self.complex_params = proposed_complex_params
     self.update_sigma(accept)
     return accept
+
+  def calc_energy_total(self, proposed_real_params, proposed_complex_params):
+    total = 0
+    for key in self.calc_energy:
+      if "complex" in self.energy_term_dependencies[key] and "real" in self.energy_term_dependencies[key]:
+        total += self.calc_energy[key](proposed_real_params, proposed_complex_params)
+      elif "real" in self.energy_term_dependencies[key]:
+        total += self.calc_energy[key](proposed_real_params)
+      elif "complex" in self.energy_term_dependencies[key]:
+        total += self.calc_energy[key](proposed_complex_params)
+      else: 
+        print("term ", key, self.calc_energy[key], " in energy terms could not be evaluated, because it is not listed as depending on either real or complex parameter groups.  Its dependencies are listed as ", self.energy_term_dependencies[key])
+    return total
 
   def draw_real_group(self):
     """
@@ -244,13 +266,16 @@ class MetropolisEngine():
     return proposed_state
 
   def draw_complex_group(self):
+    """
+    WARNING placeholder, should be drawing from complex multivariate normal (not yet implemented)
+    instead magnitude of addition to each complex number is drawn from single gaussian with width determined by complex group sigma, its measured variance
+    and phase of addition is randomly chosen (!)
+    """
     covariances = np.diagonal(self.covariance_matrix_complex)
     #map self.gausian_complex over the list
-    addition_complex = np.array(list(map(lambda sc : self.gaussian_complex(sc[0]**2*sc[1]), (self.complex_group_sampling_width, covariances) ))) #addition has compeletely random phase
-    return np.array([np.random.normal(m, self.sampling_width[index] * covariances[index]) if index < self.num_real_params else m + addition_complex[index] for index,m in enumerate(state) ])
+    addition_complex = np.array(list(map(lambda covariances : self.gaussian_complex(self.complex_group_sampling_width**2*covariances), covariances ))) #addition has compeletely random phase
+    return covariances+addition_complex
   
-  def draw_all(self):
-    return draw_real_group(), draw_complex_group()
   """
   def draw_group(self, group_id, state):
     # TODO  : rethinnk this
@@ -346,29 +371,60 @@ class MetropolisEngine():
     self.covariance_matrix_real *= (i - 2) / (i - 1)
     self.covariance_matrix_real += np.outer(old_mean_real, old_mean_real) - i / (i - 1) * np.outer(self.real_mean, self.real_mean) + np.outer(
       self.real_params, self.real_params) / (i - 1) + small_number * np.identity(self.num_real_params)
+  
   def update_covariance_matrix_complex(self, old_mean_complex):
     i = self.measure_step_counter
     small_number = self.complex_group_sampling_width ** 2 / self.measure_step_counter
-    self.covariance_matrix_real *= (i - 2) / (i - 1)
-    self.covariance_matrix_real += np.outer(old_mean_complex, old_mean_complex.conjugate()) - i / (i - 1) * np.outer(self.complex_mean, self.complex_mean.conjugate()) + np.outer(
-      self.complex_params, self.complex_params.conjugate()) / (i - 1) + small_number*np.identity(self.num_complex_params, dtype = 'complex128')
+    self.covariance_matrix_complex *= (i - 2) / (i - 1)
+    self.covariance_matrix_complex += np.outer(old_mean_complex, old_mean_complex.conjugate()) - i / (i - 1) * np.outer(self.complex_mean, self.complex_mean.conjugate()) +np.outer(self.complex_params, self.complex_params.conjugate()) / (i - 1) + small_number*np.identity(self.num_complex_params, dtype = 'complex128')
 
+
+
+  def update_group_sigma(self, group_id, accept):
+    m = self.param_space_dims//2 -1 # TODO move to init?
+    self.group_step_counter[group_id] +=1 # only count steps  while sigma was updated?
+    step_number_factor = max((self.measure_step_counter / self.m, 200)) # because it shouldnt converge until cov is measured
+    field_steplength_c = self.group_sampling_width[group_id] * self.ratio
+    if accept:
+      #print("bigger field step")
+      self.group_sampling_width[group_id] += field_steplength_c * (1 - self.target_acceptance) / step_number_factor
+      #print(self.field_sampling_width)
+    else:
+      self.group_sampling_width[group_id] -= field_steplength_c * self.target_acceptance / step_number_factor
+    assert (self.group_sampling_width[group_id]) > 0
 
   def update_sigma(self, accept):
-    """
-    Does nothing in non-adaptive base class,
-    override in other classes
-    """
-    pass
+    self.step_counter +=1 # only count steps  while sigma was updated?
+    step_number_factor = max((self.measure_step_counter / self.m, 200))
+    self.steplength_c = self.sampling_width * self.ratio
+    if accept:
+      self.sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
+    else:
+      self.sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
+    self.real_group_sampling_width = self.sampling_width
+    self.complex_group_sampling_width = self.sampling_width
+    assert (self.sampling_width) > 0
+  
   def update_real_group_sigma(self,accept):
-    """
-    Does nothing in non-adaptive base class,
-    override in other classes
-    """
-    pass
-  def update_complex_group_sigma(self,accept):
-    pass
+    self.step_counter +=1 # only count steps  while sigma was updated?
+    step_number_factor = max((self.measure_step_counter / self.m, 200))
+    self.steplength_c = self.sampling_width * self.ratio
+    if accept:
+      self.real_group_sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
+    else:
+      self.real_group_sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
+    assert (self.sampling_width) > 0
 
+  
+  def update_complex_group_sigma(self,accept):
+    self.step_counter +=1 # only count steps  while sigma was updated?
+    step_number_factor = max((self.measure_step_counter / self.m, 200))
+    self.steplength_c = self.sampling_width * self.ratio
+    if accept:
+      self.complex_group_sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
+    else:
+      self.complex_group_sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
+    assert (self.sampling_width) > 0
  
   def construct_observables(self):
     # TODO : faster method?
@@ -412,9 +468,6 @@ class MetropolisEngine():
 
 
 class AdaptiveMetropolisEngine(MetropolisEngine):
-  """ Reasoning and algorithm from 
-  Garthwaite, Fan, & Sisson 2010: arxiv.org/abs/1006.3690v1
-  """
   def __init__(self, initial_real_params, sampling_width=0.05, covariance_matrix=None, params_names=None, target_acceptance=.3, temp=0):
     super().__init__(initial_real_params, sampling_width=sampling_width,covariance_matrix=covariance_matrix, params_names=params_names, 
 target_acceptance=target_acceptance, temp=temp)
@@ -429,30 +482,6 @@ target_acceptance=target_acceptance, temp=temp)
         self.m * self.target_acceptance * (1 - self.target_acceptance)))
     # inherit mean, construct mean from base class : abs amplitude, abs of field coeffs
     # inherit other observables to measure from base class: none
-
-  def update_group_sigma(self, group_id, accept):
-    m = self.param_space_dims//2 -1 # TODO move to init?
-    self.group_step_counter[group_id] +=1 # only count steps  while sigma was updated?
-    step_number_factor = max((self.measure_step_counter / self.m, 200)) # because it shouldnt converge until cov is measured
-    field_steplength_c = self.group_sampling_width[group_id] * self.ratio
-    if accept:
-      #print("bigger field step")
-      self.group_sampling_width[group_id] += field_steplength_c * (1 - self.target_acceptance) / step_number_factor
-      #print(self.field_sampling_width)
-    else:
-      self.group_sampling_width[group_id] -= field_steplength_c * self.target_acceptance / step_number_factor
-    assert (self.group_sampling_width[group_id]) > 0
-
-  def update_sigma(self, accept):
-    self.step_counter +=1 # only count steps  while sigma was updated?
-    step_number_factor = max((self.measure_step_counter / self.m, 200))
-    self.steplength_c = self.sampling_width * self.ratio
-    if accept:
-      self.sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
-    else:
-      self.sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
-    assert (self.sampling_width) > 0
-    #print("sampling width update to", self.sampling_width)
 
 
 
