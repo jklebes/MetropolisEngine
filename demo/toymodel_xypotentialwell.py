@@ -30,71 +30,22 @@ class System():
 system = System(const=1)
 
 initial_values=np.array([0.0,0.0])
-engine = metropolisengine.MetropolisEngine(initial_real_params=initial_values, temp=0.1)
+engine = metropolis_engine.MetropolisEngine(energy_function = lambda real_params, complex_params : system.calc_system_energy(real_params), initial_real_params=initial_values, temp=0.1)
 
-# set the energy function of the metropolis engine to a function that returns 
-# energy based on a list or np array [real paramters, complex parameters] 
-# in a pre-agreed order
-engine.set_energy_function(system.calc_system_energy)
-
-#alternatively if we have an energy function in a different format,
-# first wrap it to the correct format
-def my_energy_function(param_list):
-  return system.calc_system_energy_wrong_arg_format(*param_list)
-
-engine.set_energy_function(my_energy_function)
-
-#or
-
-engine.set_energy_function(lambda l: system.calc_system_energy_wrong_arg_format(l[0], l[1]))
  
 # run the main simulation by looping over metropolis engine's step
 values = initial_values
-energy = system.calc_system_energy(initial_values)
+engine.energy = {"total":system.calc_system_energy(initial_values)}
 for i in range(1000):
   for j in range(10):
-    values, energy = engine.step_all(values, energy)
-    #print(values, energy)
+    engine.step_all()  # should be redirected to step_real_group, because no complex parameters were initialized
+    #print(engine.real_params, engine.complex_params, engine.energy)
   #measure running mean, covariance matrix estimate every 10 steps
-  engine.measure(values)
+  engine.measure() #it;s not necessary to record the values at every step , rather record at about correlation time
+  #print("adjusted stepsize to ", engine.real_group_sampling_width)
   
 
 # examine the results: final value of mean, covariance matrix
-print(engine.mean)
-print(engine.covariance_matrix)
-
-#the above likely didn't work very well because step size was not adaptive
-engine2 = metropolisengine.AdaptiveMetropolisEngine(initial_real_params=initial_values, temp=0.1)
-engine2.set_energy_function(system.calc_system_energy)
- 
-# run the main simulation by looping over metropolis engine's step
-values = initial_values
-energy = system.calc_system_energy(initial_values)
-for i in range(1000):
-  for j in range(10):
-    values, energy = engine2.step_all(values, energy)
-  #measure running mean, covariance matrix estimate every 10 steps
-  engine2.measure(values)
-print(engine2.mean)
-print(engine2.covariance_matrix)
-
-#still has problems
-#try a sequential (Gibbs sampling) simulation with the grouping functionality
-
-engine3 = metropolisengine.AdaptiveMetropolisEngine(initial_real_params=initial_values, temp=0.1)
-engine3.set_energy_function(system.calc_system_energy)
-engine3.set_energy_terms({0:system.calc_x_energy, 1:system.calc_y_energy}, {0:[0], 1:[1]})
-engine3.set_groups({0:[0], 1:[1]},{0:[0], 1:[1]})
-
-values = initial_values
-energy =  dict([])
-for key in engine3.calc_energy_terms:
-  energy[key] = engine3.calc_energy_terms[key](values)
-assert(sum(energy.values()) == system.calc_system_energy(initial_values))
-for i in range(1000):
-  for j in range(5):
-    values, energy = engine3.step_group(0, values, energy)
-    values, energy = engine3.step_group(1, values, energy)
-  engine3.measure(values)
-print(engine3.mean)
-print(engine3.covariance_matrix)
+print("mean", engine.real_mean, engine.complex_mean)
+print("cov", engine.covariance_matrix_real, engine.covariance_matrix_complex)
+print(list(zip(engine.observables_names, engine.observables)))
