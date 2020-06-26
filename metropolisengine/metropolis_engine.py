@@ -4,7 +4,7 @@ import math
 import numpy as np
 import random
 import scipy.stats
-
+import pandas
 
 class MetropolisEngine():
   """
@@ -85,7 +85,7 @@ class MetropolisEngine():
     if params_names:
     	self.params_names = params_names
     else:
-        self.params_names = ["param_"+str(i) for i in range(self.num_real_params)]
+        self.params_names = ["param_"+str(i) for i in range(self.num_real_params+ self.num_complex_params)]
     self.observables_names =  ["abs_param_"+str(i) for i in range(self.num_real_params+self.num_complex_params)]
     self.observables_names.extend(["param_"+str(i)+"_squared" for i in range(self.num_real_params+self.num_complex_params)])
 
@@ -247,7 +247,7 @@ class MetropolisEngine():
     accept = self.metropolis_decision(self.total_energy, proposed_energy)
     if accept:
       #print("accepted", proposed_state, proposed_energy)
-      self.energy = proposed_energy # TODO : saved at energy_dict because I dont expect a switch of method within a simulation
+      self.energy_total = proposed_energy # TODO : saved at energy_dict because I dont expect a switch of method within a simulation
       self.real_params = proposed_real_params
       self.complex_params = proposed_complex_params
     self.update_sigma(accept)
@@ -259,6 +259,7 @@ class MetropolisEngine():
     self.energy={}
     for key in self.calc_energy:
       self.energy[key] = self.calc_energy[key](self.real_params,self.complex_params)
+    print("initialized energy dict, self.energy = ", self.energy)
 
   def calc_energy_total(self, proposed_real_params, proposed_complex_params):
     total = 0
@@ -333,7 +334,7 @@ class MetropolisEngine():
     self.real_params_time_series.append(self.real_params)
     self.complex_params_time_series.append(self.complex_params)
     self.observables_time_series.append(self.observables)
-    for term in energy:
+    for term in self.energy:
     	self.energy_time_series[term].append(self.energy[term])
     self.real_group_sampling_width_time_series.append(self.real_group_sampling_width)
     self.complex_group_sampling_width_time_series.append(self.complex_group_sampling_width)
@@ -348,9 +349,9 @@ class MetropolisEngine():
     #append to time series
     self.real_params_time_series.append(self.real_params)
     self.observables_time_series.append(self.observables)
-    for term in energy:
+    for term in self.energy:
     	self.energy_time_series[term].append(self.energy[term])
-    self.real_group_sampling_width_time_series.append(self.real_group_sampling_width)_
+    self.real_group_sampling_width_time_series.append(self.real_group_sampling_width)
 
   def measure_complex_system(self):
     self.measure_step_counter +=1
@@ -360,7 +361,7 @@ class MetropolisEngine():
     self.update_observables_mean()
     self.complex_params_time_series.append(self.complex_params)
     self.observables_time_series.append(self.observables)
-    for term in energy:
+    for term in self.energy:
     	self.energy_time_series[term].append(self.energy[term])
     self.complex_group_sampling_width_time_series.append(self.complex_group_sampling_width)
 
@@ -389,7 +390,7 @@ class MetropolisEngine():
     self.real_mean += self.real_params / self.measure_step_counter
 
   def update_complex_mean(self):
-    print(self.complex_mean, self.complex_params)
+    #print(self.complex_mean, self.complex_params)
     self.complex_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
     self.complex_mean += self.complex_params / self.measure_step_counter
 
@@ -465,8 +466,23 @@ class MetropolisEngine():
     self.observables = np.array(observables)
 
   ############## collect, save data #####################
-  def save_time_series_csv():
-    df = pandas.DataFrame({"obsrvables", observables_time_series})
+  def save_time_series_to_csv(self):
+    time_series_dict = dict([(name,[l[i] for l in  self.observables_time_series]) for i,name in enumerate(self.observables_names)])
+    for name in self.energy:
+      time_series_dict[name+"_energy"] = self.energy_time_series[name]
+    if self.real_params_time_series:
+      for i in range(self.num_real_params):
+        time_series_dict[self.params_names[i]] = [l[i] for l in self.real_params_time_series]
+      time_series_dict["real_group_sampling_width"] = self.real_group_sampling_width_time_series
+    if self.complex_params_time_series:
+      for i in range(self.num_complex_params):
+        time_series_dict[self.params_names[self.num_real_params+i]] =[l[i] for l in self.complex_params_time_series]
+      time_series_dict["complex_group_sampling_width"] = self.complex_group_sampling_width_time_series
+    print(time_series_dict)
+    for key in time_series_dict:
+      print(key, len(time_series_dict[key]))
+    df = pandas.DataFrame.from_dict(time_series_dict)
+    print(df)
 
 
   ##############functions for complex number handling #########################
