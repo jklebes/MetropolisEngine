@@ -34,13 +34,17 @@ class MetropolisEngine():
       print("must give list containing  at least one value for initial real or complex parameters")
       raise(ValueError)
     if initial_real_params is not None: 
+      self.real_params = initial_real_params
       self.num_real_params = len(initial_real_params)
     else:
+      self.real_params = []
       self.num_real_params = 0
       self.draw_all = self.draw_complex_group  # if the parameter space is all complex, go directly to draw_complex when drawing all
     if initial_complex_params is not None:
+      self.complex_params = initial_complex_params
       self.num_complex_params = len(initial_complex_params)
     else:
+      self.complex_params = []
       self.num_complex_params = 0
       self.draw_all = self.draw_complex_group  # if the parameter space is all complex, go directly to draw_complex when drawing all
     self.param_space_dims =  self.num_real_params  + self.num_complex_params
@@ -53,6 +57,8 @@ class MetropolisEngine():
     #self.accepted_counter = 1
     self.step_counter = 1
     self.measure_step_counter = 1
+    self.complex_group_step_counter =1
+    self.real_group_step_counter =1
     self.group_step_counters=None
     self.mean=self.construct_state(initial_real_params, []) # TODO - fix this hack by taking initial params out of init
     self.observables = self.construct_observables_state(initial_real_params, [])
@@ -75,15 +81,32 @@ class MetropolisEngine():
     self.target_acceptance = target_acceptance #TODO: hard code as fct of nuber of parameter space dims
 
     #functions#
-    self.calc_energy = energy_function 
+    if isinstance(calc_energy, dict):
+      self.calc_energy = calc_energy
+      if energy_term_dependencies:
+      	self.energy_term_dependencies = energy_term_dependencies 
+      else: 
+        self.energy_term_dependencies = dict([(name:["complex", "real"]) for name in calc_energy])
+      self.complex_group_energy_terms = [name for name in energy_term_dependencies if "complex" in energy_term_dependencies[name]]#which energy terms change when complex params change
+      self.real_group_energy_terms = [name for name in energy_term_dependencies if "real" in energy_term_dependencies[name]]
+      self.calc_energy_total = 0#difficulat function construction
+    else:
+      self.calc_energy ={"total": calc_energy}
+      self.calc_energy_total = calc_energy #use in step_all
+      if energy_term_dependencies:
+        print("dependecies of term-wise energy functions given, but energy fcuntion was not given term-wise")
     if reject_condition = None:
       self.reject_condition = lambda state: False
     
-    #functions for stepping real and complex group of parameters separately
+    #if the energy can be divided into terms
+    self.energy_terms = energy_terms #dict names: functions
+    self.energy_term_dependencies = energy_term_dependencies 
     if complex_energy_functions:
-      self.complex_energy_function = complex_energy_functions
+      self.complex_energy_dependencies = complex_energy_dependencies
+      self.complex_energy_functions = complex_energy_functions
     else:
-      self.complex_energy_functions
+      self.complex_energy_dependencies ={"complex_energy": ["real_params", "complex_params"]}
+      self.complex_energy_functions = {"complex_energy":self.calc_energy}
     complex_energy_terms = self.calc_energy
     real_energy_terms = self.calc_energy
 
@@ -91,21 +114,21 @@ class MetropolisEngine():
   def set_energy_function(self, energy_function):
     #by default this is also called for system energy on change of real group only or complex group only
     self.calc_energy = energy_function
-
+  
+  """ do groups later
   def set_groups(self,group_members, group_energy_terms):
-    """in : dict (group name: positions in state)"""
     print("set self.group_members")
     self.group_members = group_members # dict (group id : [positions in state])
     self.group_energy_terms = group_energy_terms #dict (group id: [energy term ids]) 
     self.group_sampling_width = dict([(group_id, self.sampling_width) for group_id in group_members])
     print("set goup sampling widths", self.group_sampling_width)
     self.group_step_counter = dict([(group_id, 0) for group_id in group_members])
-
+  
   def set_energy_terms(self,energy_terms, dependencies):
-    """energy-terms: dict (functions : dependencies on groups)"""
     self.calc_energy_terms = energy_terms  #term id : function
     self.dependencies = dependencies # term id: [groups ids ]
-  
+  """
+
   def set_reject_condition(self, reject_fct):
     """
     set a function that takes np array state and returns a bool as system constraint / like infintie energy barrier
@@ -119,11 +142,8 @@ class MetropolisEngine():
   
   ######################## metropolis step ####################################
 
-
+  """
   def step_group(self, group_id, state, energy_list):
-    """
-    Stepping amplitude by metropolis algorithm.
-    """
     proposed_state = self.draw_group(group_id, state)
     if self.reject_condition(state):
       self.update_amplitude_sigma(accept=False)
@@ -142,18 +162,60 @@ class MetropolisEngine():
       state = proposed_state
     self.update_group_sigma(group_id,accept)
     return state, energy_list
+  """
 
-  def step_all(self, state, energy):
+  def step_complex_group(self):
+    proposed_complex_params = self.draw_complex_group()
+    if self.reject_condition(self.real_params, proposed_complex_params):
+      self.update_complex_group_sigma(accept=False)
+      #do nothing towards updating real_params, complex_params, energy_dict
+      return False
+    #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
+    energy_partial = sum([self.energy_dict[term_id] for term_id in self.complex_group_energy_terms]) #sum all energy terms relenat to group_id
+    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](self.real_params, proposed_complex_params)) for term_id in self.complex_group_energy_terms])
+    proposed_energy_partial = sum(proposed_energy_terms.values())
+    accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
+    #print("state", state,  "proposed state", proposed_state, "changed energy terms", proposed_energy_terms, "former value", energy_partial)
+    if accept:
+      #print("accepted")
+      for term_id in self.complex_group_energy_terms:
+      	self.energy_dict[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
+      #print("new energy", energy_list)
+      self.complex_params = proposed_complex_params
+    self.update_complex_group_sigma(accept)
+    return accept
+
+
+  def step_real_group(self):
+    proposed_real_params = self.draw_real_group()
+    if self.reject_condition(proposed_real_params, complex_params):
+      self.update_real_group_sigma(accept=False)
+      return False
+    #self.real_group_energy_terms : keys to energy terms which change when real-group params change
+    energy_partial = sum([self.energy_dict[term_id] for term_id in self.real_group_energy_terms]) #sum all energy terms relenat to group_id
+    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](proposed_real_params, self.complex_params)) for term_id in self.real_group_energy_terms])
+    proposed_energy_partial = sum(proposed_energy_terms.values())
+    accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
+    #print("state", state,  "proposed state", proposed_state, "changed energy terms", proposed_energy_terms, "former value", energy_partial)
+    if accept:
+      #print("accepted")
+      for term_id in self.real_group_energy_terms:
+      	self.energy_dict[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
+      self.real_params = proposed_real_params
+    self.update_real_group_sigma(accept)
+    return accept
+
+
+  def step_all(self):
     """
     Step all parameters (amplitude, field coeffs) simultaneously. 
     Generic to any proposal distribution (draw function) and adaptive algorithm
     """
-    proposed_state = self.draw_all(state)
-    #print("state", state, "proposed state", proposed_state)
-    if self.reject_condition(proposed_state):
+    proposed_real_params, proposed_complex_params = self.draw_all()
+    if self.reject_condition(proposed_real_params, proposed_complex_params):
       self.update_sigma(accept=False) 
-      return real_params, energy
-    proposed_energy = self.calc_energy(proposed_state)
+      return False
+    proposed_energy = self.calc_energy_total(proposed_real_params, proposed_complex_params)
     #print("energy", energy, "proposed_energy", proposed_energy)
     accept = self.metropolis_decision(energy, proposed_energy)
     if accept:
@@ -161,9 +223,9 @@ class MetropolisEngine():
       energy = proposed_energy
       state = proposed_state
     self.update_sigma(accept)
-    return state, energy
+    return accept
 
-  def draw_real_group(self, state):
+  def draw_real_group(self):
     """
     draw from multivariate gaussian distribution with sampling_width * covariance matrix
     exactly equivlent to drawing from n independent gaussian distributions when covariance matrix is identity matrix
@@ -171,17 +233,18 @@ class MetropolisEngine():
     :param field_coeffs: dict of current (complex) field coeff values
     In this implementation only ampltiude of perturbation and magnitude of field coeffs is modifified by adaptive metropolis algorithm with (possible adapted) step sizes and covariance matrix.  Phases of field coeffs are independently adjusted by fixed-width, uncoupled gaussian distribution around their current state at each step.
     """
+    # no arguments - look at self.real_params
     proposed_state = np.random.multivariate_normal(state,
                                                       self.sampling_width ** 2 * self.covariance_matrix,
                                                       check_valid='raise')
     return proposed_state
 
   def draw_complex_group(self, state):
+    # no argumetns - look at self.complex_params
     #copy from complex
   
-  def draw_all(self, state):
-    # gets repointed to directly draw real or draw complex if that's all there is!
-    # combine draw real and draw complex
+  def draw_all(self, real_params, complex_params):
+    return draw_real_group(real_params), draw_complex_group(complex_params)
 
   def draw_group(self, group_id, state):
     # TODO  : rethinnk this
@@ -538,3 +601,4 @@ class ComplexAdaptiveMetropolisEngine(AdaptiveMetropolisEngine):
     accept = self.metropolis_decision(surface_energy,new_surface_energy)
     #print("old energy ", field_energy, surface_energy)
     #print("proposed_ampltide", proposed_amplitude)
+import cmath
