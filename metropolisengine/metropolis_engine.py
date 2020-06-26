@@ -16,7 +16,7 @@ class MetropolisEngine():
   Subclass StaticCovarianceAdaptiveMetropolisEngine is recommended minimum level of adaptiveness.
   """
 
-  def __init__(self, energy_function, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0):
+  def __init__(self, energy_function, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0, energy_term_dependencies=None):
     """
     :param energy_function: function that calculates an energy value given parameter values : [real values] [complex values] -> float .  important, mandatory: metropolis engine is coupled to the desired physics problem by setting this function.
     :param initial_real_params: initial values for real parameters.  While the starting value is not so important, the length of this list is used to set up correct dimensions of paramter space.  Optional but either intial_real_params or initial_complex_params must be a list of length >=1.
@@ -30,7 +30,7 @@ class MetropolisEngine():
     """
     
     #parameter space #
-    if not self.initial_real_params and not self.initial_complex_params:
+    if initial_real_params is None and initial_complex_params is None:
       print("must give list containing  at least one value for initial real or complex parameters")
       raise(ValueError)
     if initial_real_params is not None: 
@@ -50,25 +50,33 @@ class MetropolisEngine():
     self.param_space_dims =  self.num_real_params  + self.num_complex_params
  
     # initializing quantities measured #
-    if covariance_matrix is None:
-      self.covariance_matrix = np.identity(self.param_space_dims) 
+    if covariance_matrix_real is None and self.num_real_params >0:
+      self.covariance_matrix_real = np.identity(self.num_real_params) 
     else:
-      self.covariance_matrix = covariance_matrix
+      self.covariance_matrix_real = covariance_matrix_real
+    if covariance_matrix_complex is None and self.num_complex_params>0 :
+      self.covariance_matrix_complex = np.identity(self.num_complex_params, dtype = "complex128") 
+    else:
+      self.covariance_matrix_complex = covariance_matrix_complex
     #self.accepted_counter = 1
     self.step_counter = 1
     self.measure_step_counter = 1
     self.complex_group_step_counter =1
     self.real_group_step_counter =1
     self.group_step_counters=None
-    self.mean=self.construct_state(initial_real_params, []) # TODO - fix this hack by taking initial params out of init
-    self.observables = self.construct_observables_state(initial_real_params, [])
-    # TODO: should be input 
+    self.real_mean=initial_real_params
+    self.complex_mean = initial_complex_params
+    #fill self.observables:
+    self.construct_observables() # measured quatities derived from both real params and complex params are saved in one list, because they are all real datatype
     if params_names:
     	self.params_names = params_names
     else:
         self.params_names = ["param_"+str(i) for i in range(self.num_real_params)]
-    self.observables_names =  ["abs_param_"+str(i) for i in range(self.num_real_params)]
-    self.observables_names.extend(["param_"+str(i)+"_squared" for i in range(self.num_real_params)])
+    self.observables_names =  ["abs_param_"+str(i) for i in range(self.num_real_params+self.num_complex_params)]
+    self.observables_names.extend(["param_"+str(i)+"_squared" for i in range(self.num_real_params+self.num_complex_params)])
+
+    # temporary variables of loop
+    self.energy = None
 
     # metropolis step, proposal distribution, and adaptiveness
     self.temp = temp
@@ -81,39 +89,30 @@ class MetropolisEngine():
     self.target_acceptance = target_acceptance #TODO: hard code as fct of nuber of parameter space dims
 
     #functions#
-    if isinstance(calc_energy, dict):
-      self.calc_energy = calc_energy
+    if isinstance(energy_function, dict):
+      self.calc_energy = energy_function
       if energy_term_dependencies:
       	self.energy_term_dependencies = energy_term_dependencies 
       else: 
-        self.energy_term_dependencies = dict([(name:["complex", "real"]) for name in calc_energy])
+        self.energy_term_dependencies = dict([(name,["complex", "real"]) for name in energy_function])
       self.complex_group_energy_terms = [name for name in energy_term_dependencies if "complex" in energy_term_dependencies[name]]#which energy terms change when complex params change
       self.real_group_energy_terms = [name for name in energy_term_dependencies if "real" in energy_term_dependencies[name]]
       self.calc_energy_total = 0#difficulat function construction
     else:
-      self.calc_energy ={"total": calc_energy}
-      self.calc_energy_total = calc_energy #use in step_all
+      self.calc_energy ={"total": energy_function}
+      self.calc_energy_total = energy_function #use in step_all
       if energy_term_dependencies:
         print("dependecies of term-wise energy functions given, but energy fcuntion was not given term-wise")
-    if reject_condition = None:
+    if reject_condition is None:
       self.reject_condition = lambda state: False
-    
-    #if the energy can be divided into terms
-    self.energy_terms = energy_terms #dict names: functions
-    self.energy_term_dependencies = energy_term_dependencies 
-    if complex_energy_functions:
-      self.complex_energy_dependencies = complex_energy_dependencies
-      self.complex_energy_functions = complex_energy_functions
-    else:
-      self.complex_energy_dependencies ={"complex_energy": ["real_params", "complex_params"]}
-      self.complex_energy_functions = {"complex_energy":self.calc_energy}
-    complex_energy_terms = self.calc_energy
-    real_energy_terms = self.calc_energy
+
 
 
   def set_energy_function(self, energy_function):
     #by default this is also called for system energy on change of real group only or complex group only
     self.calc_energy = energy_function
+
+  
   
   """ do groups later
   def set_groups(self,group_members, group_energy_terms):
@@ -171,7 +170,7 @@ class MetropolisEngine():
       #do nothing towards updating real_params, complex_params, energy_dict
       return False
     #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
-    energy_partial = sum([self.energy_dict[term_id] for term_id in self.complex_group_energy_terms]) #sum all energy terms relenat to group_id
+    energy_partial = sum([self.energy[term_id] for term_id in self.complex_group_energy_terms]) #sum all energy terms relenat to group_id
     proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](self.real_params, proposed_complex_params)) for term_id in self.complex_group_energy_terms])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
@@ -179,7 +178,7 @@ class MetropolisEngine():
     if accept:
       #print("accepted")
       for term_id in self.complex_group_energy_terms:
-      	self.energy_dict[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
+      	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       #print("new energy", energy_list)
       self.complex_params = proposed_complex_params
     self.update_complex_group_sigma(accept)
@@ -192,7 +191,7 @@ class MetropolisEngine():
       self.update_real_group_sigma(accept=False)
       return False
     #self.real_group_energy_terms : keys to energy terms which change when real-group params change
-    energy_partial = sum([self.energy_dict[term_id] for term_id in self.real_group_energy_terms]) #sum all energy terms relenat to group_id
+    energy_partial = sum([self.energy[term_id] for term_id in self.real_group_energy_terms]) #sum all energy terms relenat to group_id
     proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](proposed_real_params, self.complex_params)) for term_id in self.real_group_energy_terms])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
@@ -200,7 +199,7 @@ class MetropolisEngine():
     if accept:
       #print("accepted")
       for term_id in self.real_group_energy_terms:
-      	self.energy_dict[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
+      	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       self.real_params = proposed_real_params
     self.update_real_group_sigma(accept)
     return accept
@@ -217,10 +216,10 @@ class MetropolisEngine():
       return False
     proposed_energy = self.calc_energy_total(proposed_real_params, proposed_complex_params)
     #print("energy", energy, "proposed_energy", proposed_energy)
-    accept = self.metropolis_decision(energy, proposed_energy)
+    accept = self.metropolis_decision(self.energy, proposed_energy)
     if accept:
       #print("accepted", proposed_state, proposed_energy)
-      energy = proposed_energy
+      self.energy = proposed_energy # TODO : saved at energy_dict because I dont expect a switch of method within a simulation
       state = proposed_state
     self.update_sigma(accept)
     return accept
@@ -229,23 +228,22 @@ class MetropolisEngine():
     """
     draw from multivariate gaussian distribution with sampling_width * covariance matrix
     exactly equivlent to drawing from n independent gaussian distributions when covariance matrix is identity matrix
-    :param amplitude: current amplitude
-    :param field_coeffs: dict of current (complex) field coeff values
-    In this implementation only ampltiude of perturbation and magnitude of field coeffs is modifified by adaptive metropolis algorithm with (possible adapted) step sizes and covariance matrix.  Phases of field coeffs are independently adjusted by fixed-width, uncoupled gaussian distribution around their current state at each step.
     """
     # no arguments - look at self.real_params
-    proposed_state = np.random.multivariate_normal(state,
-                                                      self.sampling_width ** 2 * self.covariance_matrix,
+    proposed_state = np.random.multivariate_normal(self.real_params,
+                                                      self.sampling_width ** 2 * self.covariance_matrix_real,
                                                       check_valid='raise')
     return proposed_state
 
   def draw_complex_group(self, state):
-    # no argumetns - look at self.complex_params
-    #copy from complex
+    covariances = np.diagonal(self.covariance_matrix_complex)
+    #map self.gausian_complex over the list
+    addition_complex = np.array(list(map(lambda sc : self.gaussian_complex(sc[0]**2*sc[1]), (self.sampling_width, covariances) ))) #addition has compeletely random phase
+    return np.array([np.random.normal(m, self.sampling_width[index] * covariances[index]) if index < self.num_real_params else m + addition_complex[index] for index,m in enumerate(state) ])
   
-  def draw_all(self, real_params, complex_params):
-    return draw_real_group(real_params), draw_complex_group(complex_params)
-
+  def draw_all(self):
+    return draw_real_group(), draw_complex_group()
+  """
   def draw_group(self, group_id, state):
     # TODO  : rethinnk this
     # draw real andor complex, then combine updated values in desired positions with state in
@@ -256,7 +254,7 @@ class MetropolisEngine():
       new_state = copy.copy(state)
       new_state[index] = proposed_state[index]
     return new_state
-
+  """
   def metropolis_decision(self, old_energy, proposed_energy):
     """
     Considering energy difference and temperature, return decision to accept or reject step
@@ -279,55 +277,43 @@ class MetropolisEngine():
 
   ###################### measuring mean and covariance estimate #######################
  
-  def measure(self, new_state):
+  def measure(self):
     self.measure_step_counter +=1
     #new_state = self.construct_state(amplitude, field_coeffs)
     old_mean = copy.copy(self.mean)
-    self.update_mean(state=new_state)
+    self.update_mean(self.real_params, self.complex_params)
     if self.measure_step_counter > 50: #down from recommendedation because when measurement is taken only every n steps
                                   # from more statistically independent data I expect to get a more accurate estimate of cov matrix sooner
-      self.update_covariance_matrix(old_mean=old_mean, state=new_state)
+      self.update_covariance_matrix(self.real_mean, self.complex_mean, self.real_params, self.complex_params)
     # other parameters that are not the basis for cov matrix
-    state_observables = self.construct_observables_state(new_state)
-    self.update_observables_mean(state_observables)
+    self.real_observables, self.complex_observables = self.construct_observables(self.real_params, self.complex_observables)
+    self.update_observables_mean(self.real_observables, self.complex_observables)
   
-  def update_mean(self, state):
-    assert (isinstance(state, np.ndarray))
+  def update_mean(self):
+    assert (isinstance(self.real_params, np.ndarray))
     #print("self.mean", self.mean, "state", state)
-    self.mean *= (self.measure_step_counter - 1) / self.measure_step_counter
-    self.mean += state / self.measure_step_counter
+    self.real_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
+    self.real_mean += self.real_params / self.measure_step_counter
+    self.complex_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
+    self.complex_mean += self.complex_params / self.measure_step_counter
 
-  def update_observables_mean(self, state_observables):
-    self.observables *= (self.measure_step_counter - 1) / self.measure_step_counter
-    self.observables += state_observables / self.measure_step_counter
+  def update_observables_mean(self):
+    self.real_observables *= (self.measure_step_counter - 1) / self.measure_step_counter
+    self.real_observables += real_observables / self.measure_step_counter
+    self.complex_observables *= (self.measure_step_counter - 1) / self.measure_step_counter
+    self.complex_observables += complex_observables / self.measure_step_counter
 
-  def update_covariance_matrix(self, old_mean, state):
+  def update_covariance_matrix(self, old_mean_real, old_mean_complex):
     i = self.measure_step_counter
-    small_number = self.sampling_width ** 2 / self.measure_step_counter #stabilizes - coutnerintuitivelt causes nonzero estimated covariance for completely constant parameter at low stepcounts #self.step_counter instead of measurestpcounter for a smaller addition
-    self.covariance_matrix *= (i - 2) / (i - 1)
-    self.covariance_matrix += np.outer(old_mean, old_mean) - i / (i - 1) * np.outer(self.mean, self.mean) + np.outer(
-      state, state) / (i - 1) + small_number * np.identity(self.param_space_dims)
-    #print("updated convariance", self.covariance_matrix)
+    small_number = self.real_group_sampling_width ** 2 / self.measure_step_counter #stabilizes - coutnerintuitivelt causes nonzero estimated covariance for completely constant parameter at low stepcounts #self.step_counter instead of measurestpcounter for a smaller addition
+    self.covariance_matrix_real *= (i - 2) / (i - 1)
+    self.covariance_matrix_real += np.outer(old_mean_real, old_mean_real) - i / (i - 1) * np.outer(self.real_mean, self.real_mean) + np.outer(
+      self.real_params, self.real_params) / (i - 1) + small_number * np.identity(self.num_real_params)
+    small_number = self.complex_group_sampling_width ** 2 / self.measure_step_counter
+    self.covariance_matrix_real *= (i - 2) / (i - 1)
+    self.covariance_matrix_real += np.outer(old_mean_complex, old_mean_complex.conjugate()) - i / (i - 1) * np.outer(self.complex_mean, self.complex_mean.conjugate()) + np.outer(
+      self.complex_params, self.complex_params.conjugate()) / (i - 1) + small_number*np.identity(self.num_complex_params, dtype = 'complex128')
 
-
-  def construct_state(self, real_params, complex_params=None):
-    """
-    helper function to construct position in parameter space as np array 
-    By default the parameters we track for correlation matrix, co-adjustemnt of step sizes are the raw values of real and complex params
-    override in derived classes where different representation of the parameters is tracked.
-    """
-    return np.array(real_params)
-
-
-  def construct_observables_state(self, real_params, complex_params=None):
-    """
-    helper function to construct current list of additional quantities whose mean is to be measured
-    absolute values and squares of parameters (real and complex)
-    If you want different values measured, make a metropolis engine subclass or otherwise override this
-    """
-    observables = [abs(param) for param in real_params]
-    observables.extend([param**2 for param in real_params])
-    return np.array(observables)
 
   def update_sigma(self, accept):
     """
@@ -341,7 +327,16 @@ class MetropolisEngine():
     override in other classes
     """
     pass
- 
+  
+  def construct_observables(self):
+    # TODO : faster method?
+    observables = [abs(x) for x in self.real_params]
+    observables.extend([abs(x) for x in self.complex_params])
+    observables.extend([x**2 for x in self.real_params])
+    observables.extend([x*x.conjugate() for x in self.complex_params])
+    self.observables = np.array(observables)
+
+
   ##############functions for complex number handling #########################
 
   def modify_phase(self, amplitude, phase, phase_sigma=.1):
