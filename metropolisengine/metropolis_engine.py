@@ -130,7 +130,7 @@ class MetropolisEngine():
     #self.energy:
     self.initialize_energy_dict() 
     self.energy_time_series = dict([(key,[]) for key in self.energy])    
-    self.total_energy= self.calc_energy_total(initial_real_params, initial_complex_params)
+    self.energy_total= self.calc_energy_total(initial_real_params, initial_complex_params)
     if reject_condition is None:
       self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
 
@@ -244,7 +244,7 @@ class MetropolisEngine():
       return False
     proposed_energy = self.calc_energy_total(proposed_real_params, proposed_complex_params)
     #print("energy", energy, "proposed_energy", proposed_energy)
-    accept = self.metropolis_decision(self.total_energy, proposed_energy)
+    accept = self.metropolis_decision(self.energy_total, proposed_energy)
     if accept:
       #print("accepted", proposed_state, proposed_energy)
       self.energy_total = proposed_energy # TODO : saved at energy_dict because I dont expect a switch of method within a simulation
@@ -470,6 +470,7 @@ class MetropolisEngine():
     time_series_dict = dict([(name,[l[i] for l in  self.observables_time_series]) for i,name in enumerate(self.observables_names)])
     for name in self.energy:
       time_series_dict[name+"_energy"] = self.energy_time_series[name]
+      print(self.energy_time_series)
     if self.real_params_time_series:
       for i in range(self.num_real_params):
         time_series_dict[self.params_names[i]] = [l[i] for l in self.real_params_time_series]
@@ -478,9 +479,6 @@ class MetropolisEngine():
       for i in range(self.num_complex_params):
         time_series_dict[self.params_names[self.num_real_params+i]] =[l[i] for l in self.complex_params_time_series]
       time_series_dict["complex_group_sampling_width"] = self.complex_group_sampling_width_time_series
-    print(time_series_dict)
-    for key in time_series_dict:
-      print(key, len(time_series_dict[key]))
     df = pandas.DataFrame.from_dict(time_series_dict)
     print(df)
 

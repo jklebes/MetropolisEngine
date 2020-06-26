@@ -37,7 +37,7 @@ engine = metropolis_engine.MetropolisEngine(energy_function = energy_fcts, energ
  
 # run the main simulation by looping over metropolis engine's step
 #engine.energy = system.calc_system_energy(*initial_real_values, *initial_complex_values)
-for i in range(1000):
+for i in range(100):
   for j in range(10):
     engine.step_all()
     #print(engine.real_params, engine.complex_params, engine.energy)
