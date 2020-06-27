@@ -18,14 +18,16 @@ USE:
 
 see demo/
 
-minimal example:
+MINIMAL EXAMPLE:
+```import metropolisengine as me```
+
 initialize MetropolisEngine object.  You must give at least an energy function ( `[real params] [complex params] -> float` ) and at least a list of one value as either initial_real_params or initial_complex_params.  Also set a non-zero temperature of 1k_bT.
 
 ```
 def energy_function(x):
   return x**2
   
-my_engine = me.MetropolisEngine(lambda real_params, complex_params: energy_function(*real_params), initial_real_params=[0.0], temp=1)
+my_engine = me.MetropolisEngine(lambda real_params, complex_params: energy_function(*real_params), initial_real_params=[0.0], temp=.01)
 ```
 
 run the simulation by looping over `step_all()`, and record data at every step with `measure()`
