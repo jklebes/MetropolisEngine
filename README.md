@@ -8,11 +8,11 @@ Works together with some external function that takes a list of (real and comple
 
 INSTALL:
 
-pip install --index-url https://test.pypi.org/simple metropolisengine
+```pip install --index-url https://test.pypi.org/simple metropolisengine```
 
 IMPORT:
 
-import metropolisengine as me
+```import metropolisengine as me```
 
 USE:
 
@@ -25,7 +25,7 @@ initialize MetropolisEngine object.  You must give at least an energy function (
 def energy_function(x):
   return x**2
   
-my_engine = me.MetropolisEngine(lambda real_params complex_params = energy_function(*real_params), initial_real_params=[0.0], temp=1)
+my_engine = me.MetropolisEngine(lambda real_params, complex_params: energy_function(*real_params), initial_real_params=[0.0], temp=1)
 ```
 
 run the simulation by looping over `step_all()`, and record data at every step with `measure()`
@@ -40,9 +40,9 @@ for i in range(n_steps):
 look at measured quatities such as mean, (co-)variances, other default measured quantities.
 
 ```
-print(my_engine.real_mean())
-print(my_engine.covariance_matrix())
-print(zip(my_engine.observables_names, my_engine.observables_mean))
+print(my_engine.real_mean)
+print(my_engine.covariance_matrix_real)
+print(list(zip(my_engine.observables_names, my_engine.observables_mean)))
 ```
 
 finally prompt the finalization of time series data into a table and look at it
