@@ -16,7 +16,7 @@ class MetropolisEngine():
   Subclass StaticCovarianceAdaptiveMetropolisEngine is recommended minimum level of adaptiveness.
   """
 
-  def __init__(self, energy_function, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0, energy_term_dependencies=None):
+  def __init__(self, energy_functions, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0):
     """
     adaptiveness ("update_sigma" functions)  adapted from from Garthwaite, Fan & Sisson https://arxiv.org/abs/2006.12668
 
@@ -110,35 +110,30 @@ class MetropolisEngine():
         self.m * self.target_acceptance * (1 - self.target_acceptance)))
 
     #functions#
-    if isinstance(energy_function, dict):
-      self.calc_energy = energy_function
-      if energy_term_dependencies:
-      	self.energy_term_dependencies = energy_term_dependencies 
-      else: 
-        self.energy_term_dependencies = dict([(name,["complex", "real"]) for name in energy_function])
-      self.complex_group_energy_terms = [name for name in energy_term_dependencies if "complex" in energy_term_dependencies[name]]#which energy terms change when complex params change
-      self.real_group_energy_terms = [name for name in energy_term_dependencies if "real" in energy_term_dependencies[name]]
+    if isinstance(energy_functions, dict):
+      self.calc_energy = energy_functions
+      self.energy_term_names = set([]) #collect all energy term names 
+      for keys in energy_functions.values():
+        self.energy_term_names =  self.energy_term_names.union(keys)
     else:
-      self.calc_energy ={"total": energy_function}
-      self.calc_energy_total = energy_function #use in step_all
-      if energy_term_dependencies:
-        print("dependecies of term-wise energy functions given, but energy fcuntion was not given term-wise")
-      #used in case energy is a single term and parameter space is only real or only complex
-      self.real_group_energy_terms = ["total"]
-      self.complex_group_energy_terms = ["total"]
+      #if only a single function for system total energy was given
+      self.energy_term_names = ["total"]
+      self.calc_energy ={"complex":{"total": energy_functions} , "real":{"total": energy_functions}, "all":{"total": energy_functions}}
+      self.calc_energy_total = energy_functions #use in step_all
     #initialize energy
     #self.energy:
     self.initialize_energy_dict() 
-    self.energy_time_series = dict([(key,[]) for key in self.energy])    
+    self.energy_time_series = dict([(key,[]) for key in self.energy_term_names])    
     self.energy_total= self.calc_energy_total(initial_real_params, initial_complex_params)
     if reject_condition is None:
       self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
 
 
   def set_energy_function(self, energy_function):
-    #by default this is also called for system energy on change of real group only or complex group only
-    self.calc_energy = energy_function
-
+    self.calc_energy = energy_functions
+    self.energy_term_names = set([]) #collect all energy term names 
+    for keys in energy_functions.values():
+      self.energy_term_names =  self.energy_term_names.union(keys)
   
   
   """ do groups later
@@ -150,7 +145,7 @@ class MetropolisEngine():
     print("set goup sampling widths", self.group_sampling_width)
     self.group_step_counter = dict([(group_id, 0) for group_id in group_members])
   
-  def set_energy_terms(self,energy_terms, dependencies):
+  def set_energy_terms(self,energy_functions):
     self.calc_energy_terms = energy_terms  #term id : function
     self.dependencies = dependencies # term id: [groups ids ]
   """
@@ -197,14 +192,14 @@ class MetropolisEngine():
       #do nothing towards updating real_params, complex_params, energy_dict
       return False
     #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
-    energy_partial = sum([self.energy[term_id] for term_id in self.complex_group_energy_terms]) #sum all energy terms relenat to group_id
-    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](self.real_params, proposed_complex_params)) for term_id in self.complex_group_energy_terms])
+    energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
+    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
     #print("state", state,  "proposed state", proposed_state, "changed energy terms", proposed_energy_terms, "former value", energy_partial)
     if accept:
       #print("accepted")
-      for term_id in self.complex_group_energy_terms:
+      for term_id in self.calc_energy["complex"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       #print("new energy", energy_list)
       self.complex_params = proposed_complex_params
@@ -219,14 +214,14 @@ class MetropolisEngine():
       return False
     #self.real_group_energy_terms : keys to energy terms which change when real-group params change
     #print(self.energy)
-    energy_partial = sum([self.energy[term_id] for term_id in self.real_group_energy_terms]) #sum all energy terms relenat to group_id
-    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](proposed_real_params, self.complex_params)) for term_id in self.real_group_energy_terms])
+    energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["real"]]) #sum all energy terms relenat to group_id
+    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](proposed_real_params, self.complex_params)) for term_id in self.calc_energy["real"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
     #print("amplitude", self.real_params,  "proposed amplitude", proposed_real_params, "changed energy terms", proposed_energy_partial, "former value", energy_partial)
     if accept:
       #print("accepted")
-      for term_id in self.real_group_energy_terms:
+      for term_id in self.calc_energy["real"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       self.real_params = proposed_real_params
     self.update_real_group_sigma(accept)
@@ -257,14 +252,14 @@ class MetropolisEngine():
 
   def initialize_energy_dict(self):
     self.energy={}
-    for key in self.calc_energy:
-      self.energy[key] = self.calc_energy[key](self.real_params,self.complex_params)
+    for key in self.energy_term_names:
+      self.energy[key] = self.calc_energy["all"][key](self.real_params,self.complex_params)
     print("initialized energy dict, self.energy = ", self.energy)
 
   def calc_energy_total(self, proposed_real_params, proposed_complex_params):
     total = 0
-    for key in self.calc_energy:
-      total += self.calc_energy[key](proposed_real_params, proposed_complex_params)
+    for key in self.energy_term_names:
+      total += self.calc_energy["all"][key](proposed_real_params, proposed_complex_params)
     return total
 
   def draw_real_group(self):

@@ -223,7 +223,7 @@ class MetropolisEngine():
     proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](proposed_real_params, self.complex_params)) for term_id in self.real_group_energy_terms])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
-    #print("state", state,  "proposed state", proposed_state, "changed energy terms", proposed_energy_terms, "former value", energy_partial)
+    #print("amplitude", self.real_params,  "proposed amplitude", proposed_real_params, "changed energy terms", proposed_energy_partial, "former value", energy_partial)
     if accept:
       #print("accepted")
       for term_id in self.real_group_energy_terms:
@@ -273,9 +273,11 @@ class MetropolisEngine():
     exactly equivlent to drawing from n independent gaussian distributions when covariance matrix is identity matrix
     """
     # no arguments - look at self.real_params
+    #print(self.real_params, self.real_group_sampling_width, self.covariance_matrix_real)
     proposed_state = np.random.multivariate_normal(self.real_params,
                                                       self.real_group_sampling_width ** 2 * self.covariance_matrix_real,
                                                       check_valid='raise')
+    #print(proposed_state)
     return proposed_state
 
   def draw_complex_group(self):
@@ -470,7 +472,6 @@ class MetropolisEngine():
     time_series_dict = dict([(name,[l[i] for l in  self.observables_time_series]) for i,name in enumerate(self.observables_names)])
     for name in self.energy:
       time_series_dict[name+"_energy"] = self.energy_time_series[name]
-      print(self.energy_time_series)
     if self.real_params_time_series:
       for i in range(self.num_real_params):
         time_series_dict[self.params_names[i]] = [l[i] for l in self.real_params_time_series]
@@ -480,7 +481,7 @@ class MetropolisEngine():
         time_series_dict[self.params_names[self.num_real_params+i]] =[l[i] for l in self.complex_params_time_series]
       time_series_dict["complex_group_sampling_width"] = self.complex_group_sampling_width_time_series
     self.df = pandas.DataFrame.from_dict(time_series_dict)
-    print(df)
+    print(self.df)
 
 
   ##############functions for complex number handling #########################
