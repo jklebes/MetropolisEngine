@@ -31,8 +31,9 @@ system = System(k=1, alpha=-1, beta=.5)
 initial_real_values=np.array([0.0,0.0])
 initial_complex_values = np.array([0+0j])
 field_fct = lambda r, c : system.calc_field_energy(*r, *c)
-energy_fcts = {"field": field_fct, "area": (lambda real_params,complex_params : system.calc_area_energy(*real_params))}
-engine = metropolis_engine.MetropolisEngine(energy_function = energy_fcts, energy_term_dependencies = {"field": ["complex", "real"], "area": ["real"]}, initial_real_params=initial_real_values, initial_complex_params = initial_complex_values, temp=0.1)
+area_fct =  lambda real_params,complex_params : system.calc_area_energy(*real_params)
+energy_fcts = {"complex": {"field":field_fct}, "real":{"field": field_fct, "area": area_fct}, "all": {"field":field_fct, "area": area_fct}} #which energy terms change when "real" or "complex" groups of parameters change, and how they are to be re-evaluated
+engine = metropolis_engine.MetropolisEngine(energy_functions = energy_fcts, initial_real_params=initial_real_values, initial_complex_params = initial_complex_values, temp=0.1)
 
  
 # run the main simulation by looping over metropolis engine's step
