@@ -25,7 +25,7 @@ initialize MetropolisEngine object.  You must give at least an energy function (
 def energy_function(x):
   return x**2
   
-my_engine = me.MetropolisEngine(lambda real_params = energy_function(*real_params), initial_real_params=[0.0], temp=1)
+my_engine = me.MetropolisEngine(lambda real_params complex_params = energy_function(*real_params), initial_real_params=[0.0], temp=1)
 ```
 
 run the simulation by looping over `step_all()`, and record data at every step with `measure()`
