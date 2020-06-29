@@ -16,7 +16,7 @@ IMPORT:
 
 USE:
 
-see demo/
+see demo/, [cylinder](https://github.com/jklebes/cylinder)/run.py;
 
 MINIMAL EXAMPLE:
 
