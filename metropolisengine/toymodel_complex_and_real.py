@@ -50,7 +50,7 @@ for i in range(100):
 # examine the results: final value of mean, covariance matrix
 print("mean", engine.real_mean, engine.complex_mean)
 print("cov", engine.covariance_matrix_real, engine.covariance_matrix_complex)
-print(list(zip(engine.observables_names, engine.observables)))
+print(list(zip(engine.observables_names, engine.observables_mean)))
 
 engine.save_time_series()
 print(engine.df)

@@ -193,7 +193,7 @@ class MetropolisEngine():
       return False
     #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
     energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
-    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
+    proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
     #print("state", state,  "proposed state", proposed_state, "changed energy terms", proposed_energy_terms, "former value", energy_partial)
@@ -215,7 +215,7 @@ class MetropolisEngine():
     #self.real_group_energy_terms : keys to energy terms which change when real-group params change
     #print(self.energy)
     energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["real"]]) #sum all energy terms relenat to group_id
-    proposed_energy_terms = dict([(term_id, self.calc_energy[term_id](proposed_real_params, self.complex_params)) for term_id in self.calc_energy["real"]])
+    proposed_energy_terms = dict([(term_id, self.calc_energy["real"][term_id](proposed_real_params, self.complex_params)) for term_id in self.calc_energy["real"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
     #print("amplitude", self.real_params,  "proposed amplitude", proposed_real_params, "changed energy terms", proposed_energy_partial, "former value", energy_partial)
