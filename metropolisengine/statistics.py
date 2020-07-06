@@ -26,10 +26,11 @@ def find_equilibrium(out_dir, file_name, column_name = None):
     [t, g, Neff_max] = timeseries.detectEquilibration(np.array(all_timeseries[name]) )
     print(name, [t,g,Neff_max])
 
-
-
 def cut_series(out_dir, file_name, column_name=None):
   pass
+
+def equilibrium_stats():
+  return df
 
 #function to plot
 def plot_time_series(out_dir, file_name, column_name=None, log=True):

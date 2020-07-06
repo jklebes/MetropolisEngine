@@ -5,6 +5,7 @@ import numpy as np
 import random
 import scipy.stats
 import pandas
+import statistics
 
 class MetropolisEngine():
   """
@@ -108,6 +109,7 @@ class MetropolisEngine():
     self.ratio = ( #  a constant - no need to recalculate 
         (1 - (1 / self.m)) * math.sqrt(2 * math.pi) * math.exp(self.alpha ** 2 / 2) / 2 * self.alpha + 1 / (
         self.m * self.target_acceptance * (1 - self.target_acceptance)))
+    self.df = None #essentially a flag that final stats have not been gathered
 
     #functions#
     if isinstance(energy_functions, dict):
@@ -477,6 +479,11 @@ class MetropolisEngine():
     self.df = pandas.DataFrame.from_dict(time_series_dict)
     print(self.df)
 
+  def save_equilibrium_stats():
+    if self.df is None:
+      self.save_time_series()
+    self.eq_points = statistics.get_equilibration_points()
+    self.eq_means = []
 
   ##############functions for complex number handling #########################
 
