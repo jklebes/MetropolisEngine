@@ -3,6 +3,7 @@ setup.py
 metropolisengine/__init__.py
 metropolisengine/metropolis_engine.py
 metropolisengine/rejected_schemes.py
+metropolisengine/statistics.py
 metropolisengine/toymodel_complex_and_real.py
 metropolisengine/toymodel_xypotentialwell.py
 metropolisengine.egg-info/PKG-INFO

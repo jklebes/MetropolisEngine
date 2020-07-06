@@ -87,7 +87,7 @@ class MetropolisEngine():
     else:
         self.params_names = ["param_"+str(i) for i in range(self.num_real_params+ self.num_complex_params)]
     self.observables_names =  ["abs_param_"+str(i) for i in range(self.num_real_params+self.num_complex_params)]
-    self.observables_names.extend(["param_"+str(i)+"_squared" for i in range(self.num_real_params+self.num_complex_params)])
+    self.observables_names.extend(["param_"+str(i)+"_squared" for i in range(self.num_real_params)])
 
 
     # metropolis step, proposal distribution, and adaptiveness
@@ -459,7 +459,6 @@ class MetropolisEngine():
     observables = [abs(x) for x in self.real_params]
     observables.extend([abs(x) for x in self.complex_params])
     observables.extend([x**2 for x in self.real_params])
-    observables.extend([x*x.conjugate() for x in self.complex_params])
     self.observables = np.array(observables)
 
   ############## collect, save data #####################
