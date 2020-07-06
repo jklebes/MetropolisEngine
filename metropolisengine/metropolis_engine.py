@@ -5,7 +5,7 @@ import numpy as np
 import random
 import scipy.stats
 import pandas
-import statistics
+import metropolisengine.statistics
 
 class MetropolisEngine():
   """
@@ -479,11 +479,16 @@ class MetropolisEngine():
     self.df = pandas.DataFrame.from_dict(time_series_dict)
     print(self.df)
 
-  def save_equilibrium_stats():
+  def save_equilibrium_stats(self):
     if self.df is None:
       self.save_time_series()
-    self.eq_points = statistics.get_equilibration_points()
-    self.eq_means = []
+    self.eq_points = metropolisengine.statistics.get_equilibration_points(self.df)
+    print(self.eq_points)
+    self.global_eq_point = max([t for (key, [t,e,n]) in zip(self.eq_points.keys(), self.eq_points.values()) if "sampling_width" not in key]) #choice to count data
+    #while sampling width is still trending up/down
+    self.equilibrated_means, self.eq_means_error = metropolisengine.statistics.get_equilibrated_means(self.df, cutoff = self.global_eq_point)
+    print("global t_0", self.global_eq_point) #add this data to means dict
+    self.equilibrated_means["global_cutoff"] = self.global_eq_point
 
   ##############functions for complex number handling #########################
 

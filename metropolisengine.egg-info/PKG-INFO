@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: metropolisengine
-Version: 0.2.10
+Version: 0.2.14
 Summary: adaptive McMC algorithm on mixed real-complex parameter space for physics simulations
 Home-page: https://github.com/jklebes/metropolis-engine
 Author: Jason Klebes

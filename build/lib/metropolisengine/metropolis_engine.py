@@ -108,6 +108,7 @@ class MetropolisEngine():
     self.ratio = ( #  a constant - no need to recalculate 
         (1 - (1 / self.m)) * math.sqrt(2 * math.pi) * math.exp(self.alpha ** 2 / 2) / 2 * self.alpha + 1 / (
         self.m * self.target_acceptance * (1 - self.target_acceptance)))
+    self.df = None #essentially a flag that final stats have not been gathered
 
     #functions#
     if isinstance(energy_functions, dict):
@@ -477,6 +478,14 @@ class MetropolisEngine():
     self.df = pandas.DataFrame.from_dict(time_series_dict)
     print(self.df)
 
+  def save_equilibrium_stats(self):
+    if self.df is None:
+      self.save_time_series()
+    self.eq_points = statistics.get_equilibration_points()
+    print(self.eq_points)
+    self.global_eq_point = max([t for [t,e,n] in self.eq_points.values()])
+    print("global t_0", self.global_eq_point)
+    self.equilibrated_means = statistics.get_equilibrated_means(cutoff = self.global_eq_point)
 
   ##############functions for complex number handling #########################
 
