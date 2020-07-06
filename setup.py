@@ -5,13 +5,13 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="metropolisengine",
-    version = '0.2.14',
+    version = '0.2.17',
     author="Jason Klebes",
     author_email="jsklebes@googlemail.com",
     description="adaptive McMC algorithm on mixed real-complex parameter space for physics simulations",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/jklebes/metropolis-engine",
+    url="https://github.com/jklebes/MetropolisEngine",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

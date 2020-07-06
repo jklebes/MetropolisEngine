@@ -55,7 +55,7 @@ def get_equilibrated_means(df, cutoff = None):
   (or infer system global t0 equilibration point)
   """
   if cutoff is None:
-    eq_data = self.find_equilibrium(all_timeseries)
+    eq_data = self.find_equilibrium(df)
     cutoff = max([t for [t,g,n] in eq_data])
   means  = dict([])
   errors = dict([])

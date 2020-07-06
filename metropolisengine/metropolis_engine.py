@@ -426,25 +426,23 @@ class MetropolisEngine():
     assert (self.group_sampling_width[group_id]) > 0
 
   def update_sigma(self, accept):
-    self.step_counter +=1 # only count steps  while sigma was updated?
     step_number_factor = max((self.measure_step_counter / self.m, 200))
-    self.steplength_c = self.sampling_width * self.ratio
+    steplength_c = self.sampling_width * self.ratio
     if accept:
-      self.sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
+      self.sampling_width += steplength_c * (1 - self.target_acceptance) / step_number_factor
     else:
-      self.sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
+      self.sampling_width -= steplength_c * self.target_acceptance / step_number_factor
     self.real_group_sampling_width = self.sampling_width
     self.complex_group_sampling_width = self.sampling_width
     assert (self.sampling_width) > 0
   
   def update_real_group_sigma(self,accept):
-    self.step_counter +=1 # only count steps  while sigma was updated?
     step_number_factor = max((self.measure_step_counter / self.m, 200))
-    self.steplength_c = self.real_group_sampling_width * self.ratio
+    self.steplength_c = real_group_sampling_width * self.ratio
     if accept:
-      self.real_group_sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
+      self.real_group_sampling_width += steplength_c * (1 - self.target_acceptance) / step_number_factor
     else:
-      self.real_group_sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
+      self.real_group_sampling_width -= steplength_c * self.target_acceptance / step_number_factor
 
   
   def update_complex_group_sigma(self,accept):
