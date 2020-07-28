@@ -97,7 +97,6 @@ class MetropolisEngine():
     if isinstance(sampling_width, list): #TODO : conform this to how two groups are handles
       self.real_group_sampling_width = sampling_width[0]
       self.complex_group_sampling_width = sampling_width[1] #arbitrarily use this one when generating a small number to stabilize cov matrix
-      self.phase_sigma = sampling_width[2]
     else:
       self.sampling_width = sampling_width
       self.real_group_sampling_width = sampling_width
