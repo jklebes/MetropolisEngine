@@ -277,7 +277,30 @@ class MetropolisEngine():
     #print(proposed_state)
     return proposed_state
 
-  def draw_complex_group(self):
+  def draw_complex(self):
+    """
+    fully correct (for circular symmetric random complex variabels, zero pseudocovariance): uses all info in covariance matrix
+    but involved decomposing and reassembling to real and img parts at each step - might be slow
+    """
+    #take complex vector & decompose to [reals, imgs]
+    real_img_mean = np.concatenate((mean.real,mean.imag))
+    #take complex covariance matrix
+    #extract correlations Kxx, Kxy, Kyx, Kyy
+    #between real parts(x) and img parts(y)
+    Kxx=cov.real
+    #Kxx=Kyy
+    Kxy=cov.imag
+    #Kyx=-Kxy
+    #make real-valued covariance matrices [Kxx  Kxy 
+    #                                     Kyx  Kyy] 
+    real_img_cov = 0.5*np.block([[Kxx, Kxy],[-Kxy, Kxx]])
+    #draw new real and img components in the form [reals, imgs]
+    real_result, img_result = np.split(np.random.multivariate_normal(real_img_mean, real_img_cov),2)
+    #compose new complex vector 
+    return real_result+img_result*1j
+
+
+  def draw_complex_group_seperately(self):
     """
     WARNING placeholder, should be drawing from complex multivariate normal (not yet implemented)
     instead magnitude of addition to each complex number is drawn from single gaussian with width determined by complex group sigma, its measured variance
