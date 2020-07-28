@@ -277,23 +277,23 @@ class MetropolisEngine():
     #print(proposed_state)
     return proposed_state
 
-  def draw_complex(self):
+  def draw_complex_group(self):
     """
     fully correct (for circular symmetric random complex variabels, zero pseudocovariance): uses all info in covariance matrix
     but involved decomposing and reassembling to real and img parts at each step - might be slow
     """
     #take complex vector & decompose to [reals, imgs]
-    real_img_mean = np.concatenate((mean.real,mean.imag))
+    real_img_mean = np.concatenate((self.complex_params.real,self.complex_params.imag))
     #take complex covariance matrix
     #extract correlations Kxx, Kxy, Kyx, Kyy
     #between real parts(x) and img parts(y)
-    Kxx=cov.real
+    Kxx=self.covariance_matrix_complex.real
     #Kxx=Kyy
-    Kxy=cov.imag
+    Kxy=self.covariance_matrix_complex.imag
     #Kyx=-Kxy
     #make real-valued covariance matrices [Kxx  Kxy 
     #                                     Kyx  Kyy] 
-    real_img_cov = 0.5*np.block([[Kxx, Kxy],[-Kxy, Kxx]])
+    real_img_cov = self.complex_group_sampling_width**2*0.5*np.block([[Kxx, Kxy],[-Kxy, Kxx]])
     #draw new real and img components in the form [reals, imgs]
     real_result, img_result = np.split(np.random.multivariate_normal(real_img_mean, real_img_cov),2)
     #compose new complex vector 
@@ -461,11 +461,11 @@ class MetropolisEngine():
   
   def update_real_group_sigma(self,accept):
     step_number_factor = max((self.measure_step_counter / self.m, 200))
-    self.steplength_c = real_group_sampling_width * self.ratio
+    self.steplength_c = self.real_group_sampling_width * self.ratio
     if accept:
-      self.real_group_sampling_width += steplength_c * (1 - self.target_acceptance) / step_number_factor
+      self.real_group_sampling_width += self.steplength_c * (1 - self.target_acceptance) / step_number_factor
     else:
-      self.real_group_sampling_width -= steplength_c * self.target_acceptance / step_number_factor
+      self.real_group_sampling_width -= self.steplength_c * self.target_acceptance / step_number_factor
 
   
   def update_complex_group_sigma(self,accept):
