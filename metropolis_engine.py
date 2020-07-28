@@ -102,7 +102,6 @@ class MetropolisEngine():
       self.sampling_width = sampling_width
       self.real_group_sampling_width = sampling_width
       self.complex_group_sampling_width = sampling_width
-      self.phase_sigma = sampling_width
     #adativeness
     self.target_acceptance = target_acceptance #TODO: hard code as fct of nuber of parameter space dims
     self.alpha = -1 * scipy.stats.norm.ppf(self.target_acceptance / 2)
@@ -354,7 +353,7 @@ class MetropolisEngine():
 
   def modify_phase(self, mean):
     magnitude, phase = cmath.polar(mean)
-    return cmath.rect(magnitude, random.gauss(phase, 1.5))
+    return cmath.rect(magnitude, random.uniform(-math.pi, math.pi))
 
 
   """
@@ -522,16 +521,6 @@ class MetropolisEngine():
     else:
       self.complex_group_sampling_width -= steplength_c * self.target_acceptance / step_number_factor
 
-
-  def update_phase_sigma(self, accept):
-    step_number_factor = (max(self.measure_step_counter /self.m, 200))
-    steplength_c = self.phase_sigma *self.ratio
-    if accept and self.phase_sigma <1.5:
-      self.phase_sigma += steplength_c * (1-self.target_acceptance) / step_number_factor
-    else:
-      self.phase_sigma -= steplength_c * self.target_acceptance / step_number_factor
-    #if phase doesnt matter, there is a runaway to infinity
-    #gaussian breadth ~20 on circle 0 to 2pi shoud be good enough for nearly flat
  
   def construct_observables(self):
     # TODO : faster method?
