@@ -196,7 +196,6 @@ class MetropolisEngine():
     if self.reject_condition(self.real_params, proposed_complex_params):
       self.update_complex_group_sigma(accept=False)
       return False
-    #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
     energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
     proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
@@ -205,7 +204,6 @@ class MetropolisEngine():
       for term_id in self.calc_energy["complex"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       self.complex_params = proposed_complex_params
-    self.update_complex_group_sigma(accept)
     return accept
 
   def step_complex_group(self):
@@ -217,6 +215,8 @@ class MetropolisEngine():
     proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
+    print("complex group", self.complex_params, "proposed", self.proposed_complex_params)
+    print("enrgy before ", self.energy, "after" , proposed_energy_terms)
     if accept:
       for term_id in self.calc_energy["complex"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
