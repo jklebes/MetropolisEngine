@@ -14,7 +14,7 @@ class MetropolisEngine():
   adaptiveness ("update_sigma" functions) adapted from from Garthwaite, Fan & Sisson https://arxiv.org/abs/2006.12668
   """
 
-  def __init__(self, energy_functions, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0):
+  def __init__(self, energy_functions, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0, complex_sample_method = "multivariate gaussian"):
     """
     
     :param energy_function: function that calculates an energy value given parameter values : [real values] [complex values] -> float .  important, mandatory: metropolis engine is coupled to the desired physics problem by setting this function.
@@ -159,23 +159,61 @@ class MetropolisEngine():
   
   ######################## metropolis step ####################################
 
-  def step_complex_group(self):
-    proposed_complex_params = self.draw_complex_group()
+  def step_complex_group_magnitude_phase(self):
+    """
+    alternative scheme to stepping complex variables with complex multivariate gaussian proposal distribution
+    stepping magnitude (from gaussian dist), phases (from uniform dist) in two steps
+    - generates equilibrated data much sooner, generally worth it for complax params with weak phase correlation
+    set metropolis enigne to use this one via "complex_sample_method" variable
+    """
+    self.step_complex_group_magnitude()
+    self.step_complex_group_phase()
+
+  def step_complex_group_magnitude(self):
+    proposed_complex_params = self.draw_complex_group_magnitudes()
     if self.reject_condition(self.real_params, proposed_complex_params):
       self.update_complex_group_sigma(accept=False)
-      #do nothing towards updating real_params, complex_params, energy_dict
+      return False
+    energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
+    proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
+    proposed_energy_partial = sum(proposed_energy_terms.values())
+    accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
+    if accept:
+      for term_id in self.calc_energy["complex"]:
+      	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
+      self.complex_params = proposed_complex_params
+    self.update_complex_group_sigma(accept)
+    return accept
+
+  def step_complex_group_phase(self):
+    proposed_complex_params = self.draw_complex_group_phases()
+    if self.reject_condition(self.real_params, proposed_complex_params):
+      self.update_complex_group_sigma(accept=False)
       return False
     #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
     energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
     proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
-    #print("state", state,  "proposed state", proposed_state, "changed energy terms", proposed_energy_terms, "former value", energy_partial)
     if accept:
-      #print("accepted")
       for term_id in self.calc_energy["complex"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
-      #print("new energy", energy_list)
+      self.complex_params = proposed_complex_params
+    self.update_complex_group_sigma(accept)
+    return accept
+
+  def step_complex_group(self):
+    proposed_complex_params = self.draw_complex_group()
+    if self.reject_condition(self.real_params, proposed_complex_params):
+      self.update_complex_group_sigma(accept=False)
+      return False
+    energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
+    proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
+    proposed_energy_partial = sum(proposed_energy_terms.values())
+    accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
+    if accept:
+      for term_id in self.calc_energy["complex"]:
+      	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       self.complex_params = proposed_complex_params
     self.update_complex_group_sigma(accept)
     return accept
@@ -185,15 +223,11 @@ class MetropolisEngine():
     if self.reject_condition(proposed_real_params, self.complex_params):
       self.update_real_group_sigma(accept=False)
       return False
-    #self.real_group_energy_terms : keys to energy terms which change when real-group params change
-    #print(self.energy)
     energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["real"]]) #sum all energy terms relenat to group_id
     proposed_energy_terms = dict([(term_id, self.calc_energy["real"][term_id](proposed_real_params, self.complex_params)) for term_id in self.calc_energy["real"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
-    #print("amplitude", self.real_params,  "proposed amplitude", proposed_real_params, "changed energy terms", proposed_energy_partial, "former value", energy_partial)
     if accept:
-      #print("accepted")
       for term_id in self.calc_energy["real"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
       self.real_params = proposed_real_params
@@ -350,12 +384,10 @@ class MetropolisEngine():
     self.update_complex_mean()
 
   def update_real_mean(self):
-    assert (isinstance(self.real_params, np.ndarray))
     self.real_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
     self.real_mean += self.real_params / self.measure_step_counter
 
   def update_complex_mean(self):
-    #print(self.complex_mean, self.complex_params)
     self.complex_mean *= (self.measure_step_counter - 1) / self.measure_step_counter
     self.complex_mean += self.complex_params / self.measure_step_counter
 
@@ -378,7 +410,6 @@ class MetropolisEngine():
 
 
   def update_group_sigma(self, group_id, accept):
-    m = self.param_space_dims//2 -1 # TODO move to init?
     self.group_step_counter[group_id] +=1 # only count steps  while sigma was updated?
     step_number_factor = max((self.measure_step_counter / self.m, 200)) # because it shouldnt converge until cov is measured
     field_steplength_c = self.group_sampling_width[group_id] * self.ratio
