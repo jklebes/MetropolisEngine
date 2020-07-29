@@ -14,7 +14,7 @@ class MetropolisEngine():
   adaptiveness ("update_sigma" functions) adapted from from Garthwaite, Fan & Sisson https://arxiv.org/abs/2006.12668
   """
 
-  def __init__(self, energy_functions, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0, complex_sample_method = "multivariate gaussian"):
+  def __init__(self, energy_functions, reject_condition = None, initial_real_params=None, initial_complex_params=None, sampling_width=0.05, covariance_matrix_real=None, covariance_matrix_complex=None, params_names=None, target_acceptance=.3, temp=0, complex_sample_method = "multivariate-gaussian"):
     """
     
     :param energy_function: function that calculates an energy value given parameter values : [real values] [complex values] -> float .  important, mandatory: metropolis engine is coupled to the desired physics problem by setting this function.
@@ -125,6 +125,12 @@ class MetropolisEngine():
     self.energy_total= self.calc_energy_total(initial_real_params, initial_complex_params)
     if reject_condition is None:
       self.reject_condition = lambda real_params, complex_params: False  # by default no constraints
+    #switch out complex sample method if two-step, random phase sampling is requested
+    if complex_sample_method == "magnitude-phase":
+      self.step_complex_group = self.step_complex_group_magnitude_phase
+    elif complex_sample_method != "multivariate-gaussian":
+      print("complex_sample_method", complex_sample_method, "not recognized")
+      print("defaulting to multivariate-gaussian")
 
 
   def set_energy_function(self, energy_function):
@@ -163,14 +169,14 @@ class MetropolisEngine():
     """
     alternative scheme to stepping complex variables with complex multivariate gaussian proposal distribution
     stepping magnitude (from gaussian dist), phases (from uniform dist) in two steps
-    - generates equilibrated data much sooner, generally worth it for complax params with weak phase correlation
+    - faster to equilibrium and wider sampling, generally worth it for complax params with weak phase correlation
     set metropolis enigne to use this one via "complex_sample_method" variable
     """
     self.step_complex_group_magnitude()
     self.step_complex_group_phase()
 
   def step_complex_group_magnitude(self):
-    proposed_complex_params = self.draw_complex_group_magnitudes()
+    proposed_complex_params = self.draw_complex_magnitudes()
     if self.reject_condition(self.real_params, proposed_complex_params):
       self.update_complex_group_sigma(accept=False)
       return False
@@ -186,7 +192,7 @@ class MetropolisEngine():
     return accept
 
   def step_complex_group_phase(self):
-    proposed_complex_params = self.draw_complex_group_phases()
+    proposed_complex_params = self.draw_complex_phases()
     if self.reject_condition(self.real_params, proposed_complex_params):
       self.update_complex_group_sigma(accept=False)
       return False
@@ -297,6 +303,20 @@ class MetropolisEngine():
     #compose new complex vector 
     return real_result+img_result*1j
   
+  def draw_complex_magnitudes(self):
+    covariances = (self.complex_group_sampling_width**2)*np.diagonal(self.covariance_matrix_complex)
+    return np.array([self.modify_magnitude(mean, cov) for mean, cov in zip(self.complex_params, covariances)])
+
+  def modify_magnitude(self, mean, cov):
+    magnitude, phase = cmath.polar(mean)
+    return cmath.rect(random.gauss(magnitude, cov), phase)
+
+  def draw_complex_phases(self):
+    return np.array([self.modify_phase(mean) for mean in self.complex_params])
+
+  def modify_phase(self, mean):
+    magnitude, phase = cmath.polar(mean)
+    return cmath.rect(magnitude, random.uniform(-math.pi, math.pi))
 
   def metropolis_decision(self, old_energy, proposed_energy):
     """
@@ -407,19 +427,6 @@ class MetropolisEngine():
     small_number = self.complex_group_sampling_width ** 2 / self.measure_step_counter
     self.covariance_matrix_complex *= (i - 2) / (i - 1)
     self.covariance_matrix_complex += np.outer(old_mean_complex, old_mean_complex.conjugate()) - i / (i - 1) * np.outer(self.complex_mean, self.complex_mean.conjugate()) +np.outer(self.complex_params, self.complex_params.conjugate()) / (i - 1) + small_number*np.identity(self.num_complex_params, dtype = 'complex128')
-
-
-  def update_group_sigma(self, group_id, accept):
-    self.group_step_counter[group_id] +=1 # only count steps  while sigma was updated?
-    step_number_factor = max((self.measure_step_counter / self.m, 200)) # because it shouldnt converge until cov is measured
-    field_steplength_c = self.group_sampling_width[group_id] * self.ratio
-    if accept:
-      #print("bigger field step")
-      self.group_sampling_width[group_id] += field_steplength_c * (1 - self.target_acceptance) / step_number_factor
-      #print(self.field_sampling_width)
-    else:
-      self.group_sampling_width[group_id] -= field_steplength_c * self.target_acceptance / step_number_factor
-    assert (self.group_sampling_width[group_id]) > 0
 
   def update_sigma(self, accept):
     step_number_factor = max((self.measure_step_counter / self.m, 200))
