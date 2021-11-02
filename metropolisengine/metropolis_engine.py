@@ -74,8 +74,8 @@ class MetropolisEngine():
     self.complex_group_step_counter =1
     self.real_group_step_counter =1
     self.group_step_counters=None
-    self.real_mean=self.real_params
-    self.complex_mean = self.complex_params
+    self.real_mean=copy.copy(self.real_params)
+    self.complex_mean = copy.copy(self.complex_params)
     #fill self.observables:
     self.construct_observables() # measured quatities derived from both real params and complex params are saved in one list, because they are all real datatype
     self.observables_mean = self.observables
@@ -194,8 +194,8 @@ class MetropolisEngine():
   def step_complex_group_phase(self):
     proposed_complex_params = self.draw_complex_phases()
     if self.reject_condition(self.real_params, proposed_complex_params):
-      self.update_complex_group_sigma(accept=False)
       return False
+    #self.complex_group_energy_terms : keys to energy terms which change when complex group params change
     energy_partial = sum([self.energy[term_id] for term_id in self.calc_energy["complex"]]) #sum all energy terms relenat to group_id
     proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
@@ -215,8 +215,6 @@ class MetropolisEngine():
     proposed_energy_terms = dict([(term_id, self.calc_energy["complex"][term_id](self.real_params, proposed_complex_params)) for term_id in self.calc_energy["complex"]])
     proposed_energy_partial = sum(proposed_energy_terms.values())
     accept = self.metropolis_decision(energy_partial, proposed_energy_partial)
-    print("complex group", self.complex_params, "proposed", self.proposed_complex_params)
-    print("enrgy before ", self.energy, "after" , proposed_energy_terms)
     if accept:
       for term_id in self.calc_energy["complex"]:
       	self.energy[term_id] = proposed_energy_terms[term_id] #update the relevant terms 
@@ -480,14 +478,28 @@ class MetropolisEngine():
     self.df = pandas.DataFrame.from_dict(time_series_dict)
     print(self.df)
 
-  def save_equilibrium_stats(self):
+  def save_equilibrium_stats(self, external_df=None):
     if self.df is None:
       self.save_time_series()
-    self.eq_points = metropolisengine.statistics.get_equilibration_points(self.df)
-    print(self.eq_points)
+    #add additional time series of external observables to self.df
+    if external_df is not None: 
+      dfs = [self.df]+[df for df in external_df if type(df.iloc[0,0])==float or type(df.iloc[0,0])==int] #concat but exclude histories of complex/string type
+      all_df=pandas.concat(dfs, axis=1)
+    else:
+      all_df=self.df
+    self.eq_points = metropolisengine.statistics.get_equilibration_points(all_df)
+    #print(self.eq_points)
     self.global_eq_point = max([t for (key, [t,e,n]) in zip(self.eq_points.keys(), self.eq_points.values()) if "sampling_width" not in key]) #choice to count data
     #while sampling width is still trending up/down
     self.equilibrated_means, self.eq_means_error = metropolisengine.statistics.get_equilibrated_means(self.df, cutoff = self.global_eq_point)
+    if external_df is not None:
+      #save profiles to file at this point
+      profiles=[]
+      for e_df in external_df:
+        profile, error =  metropolisengine.statistics.get_equilibrated_means(e_df, cutoff=self.global_eq_point)
+        profiles.append(profile) 
+      self.field_profile = profiles[0]
+      self.field_abs_profile = profiles[1]
     print("global t_0", self.global_eq_point) #add this data to means dict
     self.equilibrated_means["global_cutoff"] = self.global_eq_point
 

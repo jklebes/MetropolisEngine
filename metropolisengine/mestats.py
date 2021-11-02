@@ -4,7 +4,8 @@ import numpy as np
 from pymbar import timeseries
 
 
-def plottable_timeseries_from_csv(in_dir, file_name, column_name=None):
+def timeseries_from_csv(in_dir, file_name, column_name=None):
+
   data = pandas.read_csv(file_name, index_col = 0)
   all_timeseries=dict([])
   if column_name is None:
@@ -22,7 +23,7 @@ def plottable_timeseries_from_csv(in_dir, file_name, column_name=None):
     all_timeseries[name] = data[name]
   return all_timeseries
 
-def get_equilibration_points(df, column_name = None):
+def find_equilibrium(all_timeseries, column_name = None):
   """
   directly uses pymbar's timeseries utility!
   source: https://github.com/choderalab/pymbar
@@ -30,37 +31,30 @@ def get_equilibration_points(df, column_name = None):
   and references therein
   """
   equilibration_data=dict([])
-  for name in df.columns.values:
-    if df.loc[:,name].nunique()>1: #ignore const series
-      """
-      t - t_0 starting point of equilibrated part of series
-      g - the statistical innefficency = 2*correlationtime +1
-      N_effmax - effective number of uncorrelated samples
-      """
-      if isinstance(df.loc[0, name] , complex):
-        [t,g,Neff_max] = timeseries.detectEquilibration(np.array([x.real for x in df.loc[:,name]]))  
-        equilibration_data[name+"_real"] = [t,g,Neff_max]
-        [t,g,Neff_max] = timeseries.detectEquilibration(np.array([x.imag for x in df.loc[:,name]]))  
-        equilibration_data[name+"_imag"] = [t,g,Neff_max]
-      else:
-        [t, g, Neff_max] = timeseries.detectEquilibration(df.loc[:,name]) 
-        equilibration_data[name] = [t,g,Neff_max]
+  for name in all_timeseries:
+    [t, g, Neff_max] = timeseries.detectEquilibration(np.array(all_timeseries[name]) )
+    """
+    t - t_0 starting point of equilibrated part of series
+    g - the statistical innefficency = 2*correlationtime +1
+    N_effmax - effective number of uncorrelated samples
+    """
+    equilibration_data[name] = [t,g,Neff_max]
   return equilibration_data
 
 def cut_series(out_dir, file_name, column_name=None):
   pass
 
-def get_equilibrated_means(df, cutoff = None):
+def get_equilibrated_means(all_timeseries, cutoff = None):
   """ re-average time series from supplied starting point
   (or infer system global t0 equilibration point)
   """
-  if cutoff is None:
-    eq_data = self.find_equilibrium(df)
+  if cutoff = None:
+    eq_data = self.find_equilibrium(all_timeseries)
     cutoff = max([t for [t,g,n] in eq_data])
   means  = dict([])
   errors = dict([])
-  for name in df.columns.values:
-    means[name] = np.average(df.loc[cutoff:, name])
+  for name in all_timeseries:
+    means[name] = np.average(all_timeseries[name][cutoff:])
   return means, errors
 
 #function to plot
