@@ -7,7 +7,7 @@ import numpy as np
 # the physics system
 class System():
   
-  def __init__(self,const):
+  def __init__(self,const=1):
     self.const= const 
 
   def calc_system_energy(self,state):
